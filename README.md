@@ -70,27 +70,153 @@ npm run typecheck # tsc --noEmit
 npm run build     # production build
 ```
 
-## Connecting the WhatsApp Cloud API
+## The WhatsApp bot: receiving messages and storing them
 
-1. Create a Meta app with the **WhatsApp** product and note the
-   **Phone number ID** and a **permanent access token**.
-2. Set `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`,
-   and `WHATSAPP_APP_SECRET` in `.env`.
-3. Point the webhook at `https://<your-domain>/api/whatsapp/webhook` and use the
-   same `WHATSAPP_VERIFY_TOKEN` — the `GET` handler completes the handshake, and
-   the `POST` handler validates Meta's `X-Hub-Signature-256`.
-4. Subscribe to the **messages** field.
+This is the heart of the system — how a message a customer types in WhatsApp
+reaches the code and ends up in the database.
 
-Without credentials the client runs in **dry-run** mode: it logs the payload it
-would send, so the entire flow can be exercised locally.
+### The receive → store pipeline
+
+```
+Customer's WhatsApp
+      │  (Meta delivers a webhook POST)
+      ▼
+POST /api/whatsapp/webhook            src/app/api/whatsapp/webhook/route.ts
+      │  1. verify X-Hub-Signature-256 (HMAC of the raw body, WHATSAPP_APP_SECRET)
+      │  2. parseInbound(body)         src/lib/whatsapp/inbound.ts
+      │     → { from, messageId, profileName, text, replyId, type }
+      ▼
+processInbound(msg)                    src/lib/bot/runtime.ts
+      │  3. log the inbound message           → MessageLog (direction = IN)
+      │  4. upsert the customer by phone       → Customer
+      │  5. load / create their session        → ConversationSession
+      │  6. snapshot the catalogue (Products + active DeliveryZones)
+      ▼
+handleTurn(input)                      src/lib/bot/engine.ts  (pure, no I/O)
+      │  returns { step, draft, replies[], effects[] }
+      ▼
+runtime executes the effects, persisting to the database:
+      │  • SAVE_CUSTOMER_NAME     → Customer.name
+      │  • CREATE_ORDER           → Order + OrderItem + Delivery + StatusHistory,
+      │                             decrements Product.stock, stamps firstOrderAt
+      │  • RECORD_MPESA_CODE      → Payment (method MPESA, status PENDING)
+      │  • MARK_CASH_ON_DELIVERY  → Payment (method CASH_ON_DELIVERY)
+      │  • OPT_OUT                → Customer.optedOut = true
+      │  • HANDOVER               → alerts the team's WhatsApp number
+      │  7. save the new step + draft          → ConversationSession
+      │  8. send each reply via the Cloud API  → MessageLog (direction = OUT)
+      ▼
+The webhook returns 200 immediately (errors are logged, never 5xx to Meta,
+so Meta does not retry).
+```
+
+The customer is always identified by their **WhatsApp phone number**, so the
+same person never creates a duplicate `Customer` row. Between messages, the
+half-finished order lives as JSON in `ConversationSession.draft` together with
+the current `step`, which is how the bot "remembers" where each customer is even
+if they go quiet for an hour and come back.
+
+### Which table each step writes
+
+| When | Table(s) written |
+| --- | --- |
+| Every inbound message | `MessageLog` (IN) |
+| Every reply the bot sends | `MessageLog` (OUT) |
+| First message from a new number | `Customer` |
+| Name captured / stated in the message | `Customer.name` |
+| Every turn | `ConversationSession` (step + draft) |
+| Customer taps **Confirm order** | `Order`, `OrderItem`, `Delivery`, `StatusHistory`; `Product.stock` decremented |
+| Customer sends an M-Pesa code / picks cash | `Payment` |
+| Staff advance the order in `/admin` | `Order.status`, `StatusHistory`, `Payment` (on PAID) |
+
+### Connecting a live WhatsApp number (Meta Cloud API)
+
+1. In the [Meta for Developers](https://developers.facebook.com/) console, create
+   an app and add the **WhatsApp** product. Note the **Phone number ID** (not the
+   phone number itself) and generate a **permanent** access token (via a System
+   User) — a temporary token expires in 24 hours.
+2. Copy the **App secret** (App settings → Basic). It's used to verify that each
+   webhook really came from Meta.
+3. Set these in `.env` (production: your host's env vars):
+
+   | Variable | What it is |
+   | --- | --- |
+   | `WHATSAPP_TOKEN` | Permanent access token |
+   | `WHATSAPP_PHONE_NUMBER_ID` | Phone number ID from the dashboard |
+   | `WHATSAPP_VERIFY_TOKEN` | Any string you invent; Meta echoes it back on setup |
+   | `WHATSAPP_APP_SECRET` | App secret (validates `X-Hub-Signature-256`) |
+   | `WHATSAPP_GRAPH_VERSION` | Graph API version, e.g. `v21.0` |
+   | `TEAM_ALERT_WHATSAPP_NUMBER` | Where new-order / handover alerts are sent |
+   | `MPESA_PAYBILL`, `MPESA_ACCOUNT_PREFIX` | Payment details shown in chat |
+   | `DATABASE_URL` | Your database (see below) |
+
+4. Deploy the app, then in the Meta dashboard → **WhatsApp → Configuration**, set
+   the **Callback URL** to `https://<your-domain>/api/whatsapp/webhook` and the
+   **Verify token** to the same `WHATSAPP_VERIFY_TOKEN`. Click **Verify and
+   save** — the `GET` handler answers Meta's handshake.
+5. **Subscribe** to the `messages` webhook field. Inbound customer messages now
+   arrive as `POST`s and flow through the pipeline above.
+
+Without these credentials the Cloud API client runs in **dry-run** mode: it logs
+the payload it would send instead of calling Meta, so the whole flow can be
+exercised locally end to end.
+
+### Testing the pipeline locally
+
+The engine is covered by unit tests (`npm test`), and you can drive the full
+receive → store path against your dev database by simulating a Meta webhook
+`POST` (omit `WHATSAPP_APP_SECRET` locally to skip the signature check):
+
+```bash
+npm run dev   # in one terminal
+
+curl -X POST http://localhost:3000/api/whatsapp/webhook \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entry": [{ "changes": [{ "value": {
+      "contacts": [{ "wa_id": "254712345678", "profile": { "name": "Grace" } }],
+      "messages": [{ "from": "254712345678", "id": "wamid.1", "type": "text",
+                     "text": { "body": "Hello Farm City, I would like to place an order:\n1. Fresh Tomatoes - 5 kg (KSh 400)\nName: Grace\nDelivery Location: Juja" } }]
+    }}]}]
+  }'
+```
+
+After the call, the rows appear in the database — inspect them with
+`npx prisma studio`, or from the storefront's `/admin` page once an order is
+confirmed.
+
+## Production database
+
+SQLite (`DATABASE_URL="file:./dev.db"`) is fine for local development, but it
+does **not** work on serverless hosts like Vercel (the filesystem is read-only
+and ephemeral). For production use a hosted Postgres (Vercel Postgres, Neon,
+Supabase, RDS, …):
+
+1. Change the datasource in `prisma/schema.prisma`:
+   ```prisma
+   datasource db {
+     provider = "postgresql"
+     url      = env("DATABASE_URL")
+   }
+   ```
+2. Point `DATABASE_URL` at the Postgres connection string.
+3. Create the tables and seed the catalogue:
+   ```bash
+   npx prisma migrate deploy   # or: npx prisma db push
+   npm run seed
+   ```
+
+The schema itself is portable — no SQLite-only features are used (enums are
+modelled as validated string columns), so only the `provider` line changes.
 
 ## Database of record
 
 Prices and product names are copied onto each order at order time, so later
 catalogue changes never rewrite history. Stock is decremented when an order is
 created. The customer is identified by their WhatsApp number (no duplicates),
-order numbers are sequential and unique, and records are cancelled rather than
-deleted.
+order numbers are sequential and unique, every status change is timestamped in
+`StatusHistory`, and records are cancelled rather than deleted. The full
+conversation is retained in `MessageLog` for support and disputes.
 
 ## Notes & next steps
 
