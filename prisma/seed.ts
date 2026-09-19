@@ -17,6 +17,7 @@ const products = [
   { slug: "kale-seedling", name: "Kale Seedling", category: "seedling", variety: "Thousand Headed", unit: "seedling", price: 5, stock: 8000, origin: "ELDORET_NURSERY" },
   { slug: "capsicum-seedling", name: "Capsicum Seedling", category: "seedling", variety: "California Wonder", unit: "seedling", price: 10, stock: 3000, origin: "ELDORET_NURSERY" },
   { slug: "hass-avocado-seedling", name: "Hass Avocado Seedling", category: "seedling", variety: "Grafted Hass", unit: "seedling", price: 250, stock: 800, origin: "ELDORET_NURSERY" },
+  { slug: "passion-fruit-seedling", name: "Grafted Passion Fruit Seedlings", category: "seedling", variety: "Grafted Purple", unit: "seedling", price: 50, stock: 2000, origin: "ELDORET_NURSERY" },
 ];
 
 const zones = [

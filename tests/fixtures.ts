@@ -6,6 +6,7 @@ export const catalog: Catalog = {
     { slug: "eggs", name: "Eggs", category: "produce", unit: "tray", price: 420, available: true, stock: 60, origin: "JUJA_HUB" },
     { slug: "kale-sukuma", name: "Kale (Sukuma Wiki)", category: "produce", unit: "bunch", price: 30, available: false, stock: 0, origin: "JUJA_HUB" },
     { slug: "tomato-seedling", name: "Tomato Seedling", category: "seedling", unit: "seedling", price: 8, available: true, stock: 5000, origin: "ELDORET_NURSERY" },
+    { slug: "passion-fruit-seedling", name: "Grafted Passion Fruit Seedlings", category: "seedling", unit: "seedling", price: 50, available: true, stock: 2000, origin: "ELDORET_NURSERY" },
   ],
   zones: [
     { id: "z-juja", name: "Juja Town", type: "LOCAL", fee: 100, minimumOrder: 300, cutoffTime: "14:00" },

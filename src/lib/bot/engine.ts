@@ -101,6 +101,10 @@ function start(input: EngineInput, _draft: OrderDraft): EngineResult {
   draft.items = resolveItems(parsed.items, input.catalog);
   draft.path = detectPath(draft.items, input.catalog);
   draft.origin = draft.path === "seedling" ? "ELDORET_NURSERY" : "JUJA_HUB";
+  // The storefront message may already state the name and delivery location;
+  // capture them so the bot doesn't ask again.
+  if (parsed.customerName) draft.customerName = parsed.customerName;
+  if (parsed.deliveryLocation) draft.delivery.address = parsed.deliveryLocation;
 
   if (draft.path === "mixed") {
     return {
@@ -196,8 +200,11 @@ function confirmItems(input: EngineInput, draft: OrderDraft): EngineResult {
 }
 
 function routeAfterItems(input: EngineInput, draft: OrderDraft): EngineResult {
-  // Ask for a name if we don't know the customer.
-  if (!input.customer.isReturning || !input.customer.name) {
+  // We may already know the name: a returning customer, or one the storefront
+  // message stated ("Name: kelly"). Only ask when we have neither.
+  const returningName = input.customer.isReturning ? input.customer.name : null;
+  const knownName = returningName ?? draft.customerName ?? null;
+  if (!knownName) {
     return {
       step: "ASK_NAME",
       draft,
@@ -206,8 +213,14 @@ function routeAfterItems(input: EngineInput, draft: OrderDraft): EngineResult {
     };
   }
   const next = clone(draft);
-  next.customerName = input.customer.name ?? undefined;
-  return beginDeliveryPath(input, next, `Welcome back, ${next.customerName}! `);
+  next.customerName = knownName;
+  const greeting = returningName ? `Welcome back, ${knownName}! ` : `Thanks, ${knownName}! `;
+  const res = beginDeliveryPath(input, next, greeting);
+  // Persist a name that came from the message but isn't on the customer record.
+  if (!input.customer.name && draft.customerName) {
+    return { ...res, effects: [{ type: "SAVE_CUSTOMER_NAME", name: knownName }, ...res.effects] };
+  }
+  return res;
 }
 
 // --- Step: name -------------------------------------------------------------
