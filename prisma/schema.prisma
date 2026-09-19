@@ -1,0 +1,235 @@
+// Farm City data model.
+//
+// One customer has many orders; one order has many items, one delivery, and
+// one or more payments. Every status change is recorded in StatusHistory so
+// nothing is ever silently overwritten. Prices and product names are copied
+// onto the order at order time so later catalogue changes never rewrite history.
+//
+// SQLite is used for local development (see DATABASE_URL). Enums are modelled as
+// String columns with values validated in application code (see src/domain),
+// because SQLite does not support native enums — the same schema then works
+// unchanged on Postgres.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// --- Catalogue -------------------------------------------------------------
+
+model Product {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  category     String // produce | seedling | grocery
+  variety      String? // e.g. seedling variety
+  unit         String // kg | tray | piece | punnet
+  price        Float
+  stock        Float    @default(0)
+  available    Boolean  @default(true)
+  origin       String // JUJA_HUB | ELDORET_NURSERY
+  description  String?
+  imageUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([category])
+}
+
+model DeliveryZone {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  type         String // LOCAL | COUNTRYWIDE
+  fee          Float    @default(0)
+  minimumOrder Float    @default(0)
+  cutoffTime   String? // "14:00" local time, produce same-day cutoff
+  daysAvailable String? // comma-separated, e.g. "Mon,Tue,Wed"
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  deliveries Delivery[]
+}
+
+// --- People ----------------------------------------------------------------
+
+model Customer {
+  id             String   @id @default(cuid())
+  phone          String   @unique // WhatsApp number, no '+', identifies the customer
+  name           String?
+  type           String   @default("household") // household | farmer | institution
+  defaultAddress String?
+  optedOut       Boolean  @default(false)
+  firstOrderAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  orders       Order[]
+  sessions     ConversationSession[]
+  messages     MessageLog[]
+  bulkQuotes   BulkQuote[]
+}
+
+model StaffUser {
+  id        String   @id @default(cuid())
+  name      String
+  role      String // owner | packer | dispatcher | rider
+  phone     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// --- Orders ----------------------------------------------------------------
+
+model Order {
+  id            String   @id @default(cuid())
+  number        String   @unique // FC-0142
+  customerId    String
+  source        String? // website_cart | product_page | direct_chat
+  cartRef       String? // CART-xxxx reference from the website
+  origin        String // JUJA_HUB | ELDORET_NURSERY
+  status        String   @default("NEW") // see OrderStatus in src/domain
+  paymentStatus String   @default("PENDING") // PENDING | PAID | FAILED | REFUNDED
+  subtotal      Float    @default(0)
+  discount      Float    @default(0)
+  deliveryFee   Float    @default(0)
+  total         Float    @default(0)
+  notes         String?
+  linkedOrderId String? // for mixed carts split into two linked orders
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  customer      Customer        @relation(fields: [customerId], references: [id])
+  linkedOrder   Order?          @relation("LinkedOrders", fields: [linkedOrderId], references: [id])
+  linkedFrom    Order[]         @relation("LinkedOrders")
+  items         OrderItem[]
+  delivery      Delivery?
+  payments      Payment[]
+  statusHistory StatusHistory[]
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String?
+  productName String // copied at order time
+  variety     String?
+  quantity    Float
+  unit        String
+  unitPrice   Float // copied at order time
+  lineTotal   Float
+
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+}
+
+model Delivery {
+  id             String    @id @default(cuid())
+  orderId        String    @unique
+  method         String // LOCAL_RIDER | COURIER | BUS | PICKUP
+  zoneId         String?
+  address        String?
+  landmark       String?
+  locationPin    String?
+  county         String?
+  town           String?
+  receiverName   String?
+  receiverPhone  String?
+  requestedDate  DateTime?
+  timeWindow     String?
+  assignedTo     String? // rider or courier name
+  trackingNumber String?
+  dispatchedAt   DateTime?
+  deliveredAt    DateTime?
+
+  order Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  zone  DeliveryZone? @relation(fields: [zoneId], references: [id])
+}
+
+model Payment {
+  id         String    @id @default(cuid())
+  orderId    String
+  method     String // MPESA | CASH_ON_DELIVERY | BANK
+  amount     Float
+  mpesaCode  String?
+  status     String    @default("PENDING") // PENDING | VERIFIED | FAILED | REFUNDED
+  verifiedBy String?
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model StatusHistory {
+  id        String   @id @default(cuid())
+  orderId   String
+  oldStatus String?
+  newStatus String
+  changedBy String // "bot" or a staff name
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// --- Conversation ----------------------------------------------------------
+
+model ConversationSession {
+  id           String   @id @default(cuid())
+  customerId   String?
+  phone        String   @unique // one live session per WhatsApp number
+  step         String   @default("IDLE") // see ConversationStep in src/domain
+  draft        String? // JSON blob of the in-progress order
+  lastActivity DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+}
+
+model MessageLog {
+  id          String   @id @default(cuid())
+  customerId  String?
+  phone       String
+  direction   String // IN | OUT
+  content     String
+  messageType String   @default("text") // text | button | list | image | template
+  createdAt   DateTime @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([phone])
+}
+
+model BulkQuote {
+  id           String   @id @default(cuid())
+  customerId   String?
+  organisation String?
+  itemsSummary String
+  quantity     String?
+  frequency    String?
+  location     String?
+  status       String   @default("NEW") // NEW | QUOTED | WON | LOST
+  assignedTo   String?
+  quotedAmount Float?
+  createdAt    DateTime @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+}
+
+// --- Ordering counter ------------------------------------------------------
+// A single row that hands out sequential order numbers atomically.
+model Counter {
+  name  String @id
+  value Int    @default(0)
+}
