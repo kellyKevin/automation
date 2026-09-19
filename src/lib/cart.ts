@@ -1,11 +1,21 @@
 // The cart handoff: how the website turns a cart into a WhatsApp message, and
-// how the bot reads that message back. The format is deliberately simple and
-// stable so the parser is reliable.
+// how the bot reads that message back.
+//
+// The bot's own format is deliberately simple and stable:
 //
 //   Hello Farm City, I'd like to order:
 //   • Tomatoes x 5 kg
 //   • Eggs x 2 trays
 //   Ref: CART-8F3K
+//
+// but the parser is also tolerant of the storefront's richer "place an order"
+// format, so real messages from the website are read correctly too:
+//
+//   Hello Farm City, I would like to place an order:
+//   1. Grafted Passion Fruit Seedlings - 4 seedling (KSh 200)
+//   Total Estimated: KSh 200
+//   Name: kelly
+//   Delivery Location: langata, Nairobi
 
 export interface CartItem {
   /** Product slug, when the item came from a known catalogue product. */
@@ -18,6 +28,10 @@ export interface CartItem {
 export interface ParsedOrder {
   items: CartItem[];
   ref?: string;
+  /** Customer name, when the message states one ("Name: kelly"). */
+  customerName?: string;
+  /** Delivery location, when the message states one. */
+  deliveryLocation?: string;
 }
 
 const GREETING = "Hello Farm City, I'd like to order:";
@@ -59,29 +73,46 @@ export function buildOrderLink(
 }
 
 const REF_RE = /ref\s*[:#-]?\s*(CART-[A-Z0-9]{3,})/i;
+const NAME_RE = /^name\s*[:\-]\s*(.+)$/im;
+const LOCATION_RE = /^delivery\s*(?:location|town|address)?[^:\-]*[:\-]\s*(.+)$/im;
 
-// A line item like:  • Tomatoes x 5 kg   /   - Eggs × 2 trays   /   Kale * 3 bunches
-// Also tolerates:    Tomatoes - 5 kg     /   5 kg tomatoes  (qty first)
+// A line item like:
+//   • Tomatoes x 5 kg   /   - Eggs × 2 trays   /   Kale * 3 bunches
+//   1. Grafted Passion Fruit Seedlings - 4 seedling (KSh 200)   (numbered, priced)
+// Also tolerates qty-first phrasing:  5 kg tomatoes.
+// A leading list number ("1.", "2)") is stripped, and any trailing price
+// ("(KSh 200)", "- KSh 200") after the unit is ignored.
 const ITEM_BULLET_RE =
-  /^[\s>*\-•–—]*(.+?)\s*(?:x|×|\*|-)\s*(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\s*$/i;
+  /^[\s>*\-•–—]*(?:\d+[.)]\s*)?(.+?)\s*(?:x|×|\*|-|–|—)\s*(\d+(?:\.\d+)?)\s*([A-Za-z]+)?\b.*$/i;
 const ITEM_QTYFIRST_RE =
   /^[\s>*\-•–—]*(\d+(?:\.\d+)?)\s*([A-Za-z]+)\s+(?:of\s+)?(.+?)\s*$/i;
 
+// Lines that are order metadata, never items.
+const META_LINE_RE =
+  /^(?:ref|name|delivery|total|sub-?total|estimated|please|payment|order)\b/i;
+const GREETING_RE = /^hello\b|like to (?:place an )?order|place an order/i;
+
 /**
- * Parse an incoming WhatsApp order message into items + optional ref.
- * Returns items === [] when the message doesn't look like an order at all
- * (so the caller can route it to the enquiry / free-text path).
+ * Parse an incoming WhatsApp order message into items, an optional ref, and any
+ * stated name / delivery location. Returns items === [] when the message
+ * doesn't look like an order at all (so the caller can route it to the enquiry
+ * / free-text path).
  */
 export function parseOrderMessage(text: string): ParsedOrder {
   const refMatch = text.match(REF_RE);
   const ref = refMatch ? refMatch[1].toUpperCase() : undefined;
 
+  const nameMatch = text.match(NAME_RE);
+  const customerName = nameMatch ? cleanName(nameMatch[1]) : undefined;
+
+  const locMatch = text.match(LOCATION_RE);
+  const deliveryLocation = locMatch ? cleanName(locMatch[1]) : undefined;
+
   const items: CartItem[] = [];
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (/^ref\b/i.test(line)) continue;
-    if (/i'?d like to order/i.test(line) || /^hello\b/i.test(line)) continue;
+    if (META_LINE_RE.test(line) || GREETING_RE.test(line)) continue;
 
     const bullet = line.match(ITEM_BULLET_RE);
     if (bullet) {
@@ -105,7 +136,7 @@ export function parseOrderMessage(text: string): ParsedOrder {
     }
   }
 
-  return { items, ref };
+  return { items, ref, customerName, deliveryLocation };
 }
 
 function cleanName(raw: string): string {

@@ -129,6 +129,36 @@ describe("seedling order path", () => {
   });
 });
 
+describe("storefront 'place an order' message", () => {
+  const REAL = [
+    "Hello Farm City, I would like to place an order:",
+    "",
+    "1. Grafted Passion Fruit Seedlings - 4 seedling (KSh 200)",
+    "",
+    "Total Estimated: KSh 200",
+    "Name: kelly",
+    "Delivery Location: langata, Nairobi",
+    "",
+    "Please confirm availability and delivery fees.",
+  ].join("\n");
+
+  it("routes a real customer message to the seedling path and skips ASK_NAME", () => {
+    const c = new Convo(newCustomer); // new customer, but the message states a name
+    c.send({ text: REAL });
+    expect(c.step).toBe("CONFIRM_ITEMS");
+    expect(c.draft.path).toBe("seedling");
+    expect(c.draft.customerName).toBe("kelly");
+    expect(c.draft.items).toEqual([
+      expect.objectContaining({ name: "Grafted Passion Fruit Seedlings", quantity: 4, unit: "seedling", available: true }),
+    ]);
+
+    const res = c.send({ replyId: "items_yes" });
+    // Name already known from the message -> straight to the seedling flow.
+    expect(c.step).toBe("SEEDLING_COUNTY");
+    expect(res.effects.map((e) => e.type)).toContain("SAVE_CUSTOMER_NAME");
+  });
+});
+
 describe("stock handling", () => {
   it("drops out-of-stock items on confirm and shows the flag", () => {
     const c = new Convo(returning);

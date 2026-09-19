@@ -42,6 +42,42 @@ describe("parseOrderMessage", () => {
     expect(parsed.ref).toBeUndefined();
   });
 
+  it("parses the storefront 'place an order' format (numbered, priced, with name & location)", () => {
+    const msg = [
+      "Hello Farm City, I would like to place an order:",
+      "",
+      "1. Grafted Passion Fruit Seedlings - 4 seedling (KSh 200)",
+      "",
+      "Total Estimated: KSh 200",
+      "Name: kelly",
+      "Delivery Location: langata, Nairobi",
+      "",
+      "Please confirm availability and delivery fees.",
+    ].join("\n");
+    const parsed = parseOrderMessage(msg);
+    expect(parsed.items).toEqual([
+      { name: "Grafted Passion Fruit Seedlings", quantity: 4, unit: "seedling" },
+    ]);
+    expect(parsed.customerName).toBe("kelly");
+    expect(parsed.deliveryLocation).toBe("langata, Nairobi");
+  });
+
+  it("parses a multi-line numbered order and ignores prices/totals", () => {
+    const msg = [
+      "Hello Farm City, I would like to place an order:",
+      "1. Fresh Cabbage - 2 kg (KSh 150)",
+      "2. Kale / Sukuma Wiki - 3 kg (KSh 270)",
+      "Total Estimated: KSh 420",
+      "Name: Grace Wanjiru",
+    ].join("\n");
+    const parsed = parseOrderMessage(msg);
+    expect(parsed.items).toEqual([
+      { name: "Fresh Cabbage", quantity: 2, unit: "kg" },
+      { name: "Kale / Sukuma Wiki", quantity: 3, unit: "kg" },
+    ]);
+    expect(parsed.customerName).toBe("Grace Wanjiru");
+  });
+
   it("round-trips format -> parse", () => {
     const ref = generateCartRef();
     const items = [{ name: "Tomatoes", quantity: 5, unit: "kg" }];
