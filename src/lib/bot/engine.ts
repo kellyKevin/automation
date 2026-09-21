@@ -69,6 +69,14 @@ export function handleTurn(input: EngineInput): EngineResult {
       return summaryStep(input, draft);
     case "AWAIT_PAYMENT":
       return awaitPayment(input, draft);
+    case "BULK_ORG":
+      return bulkOrg(input, draft);
+    case "BULK_ITEMS":
+      return bulkItems(input, draft);
+    case "BULK_QUANTITY":
+      return bulkQuantity(input, draft);
+    case "BULK_LOCATION":
+      return bulkLocation(input, draft);
     default:
       return start(input);
   }
@@ -77,6 +85,23 @@ export function handleTurn(input: EngineInput): EngineResult {
 // --- Step: start ------------------------------------------------------------
 
 function start(input: EngineInput): EngineResult {
+  // Enquiry-menu buttons (shown below when the message isn't an order).
+  if (input.replyId === "menu_bulk") return startBulk();
+  if (input.replyId === "menu_produce" || input.replyId === "menu_seedlings") {
+    const what = input.replyId === "menu_seedlings" ? "seedlings" : "fresh produce";
+    return {
+      step: "IDLE",
+      draft: emptyDraft(),
+      replies: [
+        text(
+          `Great! Send me your ${what} list, one item per line, e.g.\n` +
+            "• Tomatoes x 5 kg\n• Onions x 2 kg\n\nI'll price it and set up your order.",
+        ),
+      ],
+      effects: [],
+    };
+  }
+
   const parsed = parseOrderMessage(input.text ?? "");
   if (parsed.items.length === 0) {
     // Not an order — offer the enquiry menu, stay idle.
@@ -616,6 +641,111 @@ function awaitPayment(input: EngineInput, draft: OrderDraft): EngineResult {
   return retryOrHandover(draft, "AWAIT_PAYMENT", "no payment signal", [
     text("Once you've paid, reply with the M-Pesa confirmation message, or tap an option above."),
   ]);
+}
+
+// --- Bulk / institution enquiry (Part 3) ------------------------------------
+// The bot gathers the same basics as the website quote form, then hands the
+// conversation to a person who prepares and sends the quote.
+
+function startBulk(): EngineResult {
+  return {
+    step: "BULK_ORG",
+    draft: { ...emptyDraft(), bulk: true, bulkData: {} },
+    replies: [
+      text(
+        "\u{1F33E} We supply schools, hotels, restaurants, groceries and farms in bulk.\n\n" +
+          "I'll take a few details and pass you to our team for a quote.\n\n" +
+          "First — what's the name of your organisation, business or farm? (or reply *skip*)",
+      ),
+    ],
+    effects: [],
+  };
+}
+
+function bulkOrg(input: EngineInput, draft: OrderDraft): EngineResult {
+  const said = (input.text ?? "").trim();
+  const next = clone(draft);
+  next.bulkData = { ...next.bulkData, organisation: /^skip$/i.test(said) || !said ? null : said };
+  next.retries = 0;
+  return {
+    step: "BULK_ITEMS",
+    draft: next,
+    replies: [
+      text("Which products do you need? List them, e.g.\n• Tomatoes\n• Sukuma wiki\n• Onions"),
+    ],
+    effects: [],
+  };
+}
+
+function bulkItems(input: EngineInput, draft: OrderDraft): EngineResult {
+  const items = (input.text ?? "").trim();
+  if (!items) {
+    return retryOrHandover(draft, "BULK_ITEMS", "no bulk items", [
+      text("Please list the products you'd like us to quote for."),
+    ]);
+  }
+  const next = clone(draft);
+  next.bulkData = { ...next.bulkData, items };
+  next.retries = 0;
+  return {
+    step: "BULK_QUANTITY",
+    draft: next,
+    replies: [
+      text("Roughly how much, and how often?\ne.g. “50kg tomatoes weekly” or “200 seedlings, one-off”"),
+    ],
+    effects: [],
+  };
+}
+
+function bulkQuantity(input: EngineInput, draft: OrderDraft): EngineResult {
+  const qty = (input.text ?? "").trim();
+  if (!qty) {
+    return retryOrHandover(draft, "BULK_QUANTITY", "no bulk quantity", [
+      text("Please give a rough quantity and how often you'll need it."),
+    ]);
+  }
+  const next = clone(draft);
+  next.bulkData = { ...next.bulkData, quantity: qty, frequency: detectFrequency(qty) };
+  next.retries = 0;
+  return {
+    step: "BULK_LOCATION",
+    draft: next,
+    replies: [text("Last thing — which town and county should we deliver to?")],
+    effects: [],
+  };
+}
+
+function bulkLocation(input: EngineInput, draft: OrderDraft): EngineResult {
+  const location = (input.text ?? "").trim();
+  if (!location) {
+    return retryOrHandover(draft, "BULK_LOCATION", "no bulk location", [
+      text("Please share the delivery town and county."),
+    ]);
+  }
+  const next = clone(draft);
+  next.bulkData = { ...next.bulkData, location };
+  next.retries = 0;
+  return {
+    step: "HANDOVER",
+    draft: next,
+    replies: [
+      text(
+        "Perfect — thank you! \u{1F4CB}\n\n" +
+          "I've sent your bulk request to our team. They'll prepare a quote and get back to you shortly on this number.",
+      ),
+    ],
+    effects: [{ type: "CREATE_BULK_QUOTE", draft: next }],
+  };
+}
+
+function detectFrequency(t: string): string | null {
+  const s = t.toLowerCase();
+  if (/\bdaily|every day\b/.test(s)) return "Daily";
+  if (/\bweekly|per week|a week|each week\b/.test(s)) return "Weekly";
+  if (/\bbi-?weekly|fortnight/.test(s)) return "Biweekly";
+  if (/\bmonthly|per month|a month|each month\b/.test(s)) return "Monthly";
+  if (/\bone-?off|once\b/.test(s)) return "One-off";
+  return null;
 }
 
 // --- Helpers ----------------------------------------------------------------

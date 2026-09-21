@@ -203,6 +203,34 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         break;
       }
 
+      case "CREATE_BULK_QUOTE": {
+        const b = effect.draft.bulkData ?? {};
+        const contact = effect.draft.customerName ?? customer.name ?? null;
+        const quote = await prisma.bulkQuote.create({
+          data: {
+            type: "institutional",
+            organisation: b.organisation ?? null,
+            contactPerson: contact,
+            phone,
+            itemsSummary: b.items ?? "(not specified)",
+            quantity: b.quantity ?? null,
+            frequency: b.frequency ?? null,
+            location: b.location ?? null,
+            notes: "Received via WhatsApp bot",
+          },
+        });
+        await alertTeam(
+          textMsg(
+            `\u{1F9FE} New bulk quote request (WhatsApp)\n` +
+              `${quote.organisation ?? contact ?? phone} (${phone})\n` +
+              `Items: ${quote.itemsSummary}\n` +
+              `Qty: ${quote.quantity ?? "-"}${quote.frequency ? ` (${quote.frequency})` : ""}\n` +
+              `Deliver to: ${quote.location ?? "-"}`,
+          ),
+        );
+        break;
+      }
+
       case "OPT_OUT":
         await prisma.customer.update({
           where: { id: customer.id },

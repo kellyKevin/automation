@@ -80,7 +80,10 @@ export const CONVERSATION_STEPS = [
   "SEEDLING_DATE",
   "SUMMARY",
   "AWAIT_PAYMENT",
-  "BULK_ENQUIRY",
+  "BULK_ORG",
+  "BULK_ITEMS",
+  "BULK_QUANTITY",
+  "BULK_LOCATION",
   "HANDOVER", // handed to a human
   "DONE",
 ] as const;
