@@ -2,9 +2,9 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Farm City — Fresh produce & seedlings",
+  title: "Farm City — Owner Dashboard",
   description:
-    "Order fresh produce and seedlings from Farm City on WhatsApp. Juja & Thika delivery, countrywide seedling dispatch.",
+    "Farm City operations dashboard: manage orders, payments, delivery and status updates for the WhatsApp ordering system.",
 };
 
 export default function RootLayout({
@@ -17,8 +17,8 @@ export default function RootLayout({
       <body>
         <header className="site">
           <div className="container">
-            <h1>🌱 Farm City</h1>
-            <p>Fresh produce &amp; seedlings — order on WhatsApp</p>
+            <h1>🌱 Farm City — Dashboard</h1>
+            <p>Orders, payments &amp; delivery for the WhatsApp ordering system</p>
           </div>
         </header>
         <main className="container">{children}</main>

@@ -1,8 +1,26 @@
-# Farm City — WhatsApp ordering flow
+# Farm City — Owner Dashboard & backend
 
-The website is the shop window; everything after **"Order on WhatsApp"** happens
-inside WhatsApp, driven by a bot and recorded in a database. This repo implements
-that flow end to end:
+> **Two-repo architecture.** Farm City runs as two apps that share **one
+> database**:
+>
+> | Repo | Role | Deploys as |
+> | --- | --- | --- |
+> | [`kellyKevin/FARM-CITY`](https://github.com/kellyKevin/FARM-CITY) | The **customer site** — storefront + WhatsApp bot + webhook | the shop (farm-city-red) |
+> | `kellyKevin/automation` (this repo) | The **owner dashboard** + backend | the ops dashboard |
+>
+> Both point at the **same `DATABASE_URL`** (a shared Postgres in production),
+> so orders the bot creates on the site appear immediately in this dashboard.
+> The customer WhatsApp number's webhook is registered against the **site**
+> (FARM-CITY); this app uses the WhatsApp client only to send status-update
+> messages when staff advance an order.
+
+This repo is the **dashboard**: staff sign in (later), review incoming orders,
+verify payments, and advance each order through its lifecycle — every change is
+recorded and the customer is notified on WhatsApp. It carries the full backend
+(Prisma schema, order service, WhatsApp client, and the bot engine) so it can
+read and write the shared database directly.
+
+The customer-facing pieces it also contains end to end:
 
 - a **storefront** (Next.js) that builds a cart and hands it off to WhatsApp,
 - a **WhatsApp bot** (Meta Cloud API webhook) that confirms items, collects
