@@ -6,6 +6,7 @@ import { sendMessage, sendTemplate } from "@/lib/whatsapp/client";
 import { templateForStatus } from "@/lib/whatsapp/templates";
 import { isWindowOpen } from "@/lib/whatsapp/window";
 import { chooseOutbound } from "@/lib/messaging/deliver";
+import { getStaff } from "@/lib/auth/staff";
 import { ORDER_STATUSES, type OrderStatus } from "@/domain";
 
 type SendResult = { sent: boolean; id?: string };
@@ -19,6 +20,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const staff = await getStaff();
+  if (!staff) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const to = body?.status as OrderStatus;
@@ -27,7 +32,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const changedBy = typeof body?.changedBy === "string" ? body.changedBy : "staff";
+  const changedBy = typeof body?.changedBy === "string" ? body.changedBy : staff.name;
   const result = await changeOrderStatus(id, to, changedBy);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 409 });

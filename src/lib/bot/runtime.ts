@@ -87,6 +87,10 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     update: { customerId: customer.id, lastActivity: new Date() },
   });
 
+  // If a human has taken over this chat, the bot stays quiet (Part 8.5). The
+  // message is already logged, so it appears in the dashboard Inbox.
+  if (session.handover) return;
+
   const draft: OrderDraft = session.draft
     ? (JSON.parse(session.draft) as OrderDraft)
     : emptyDraft();
@@ -168,12 +172,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     }
   }
 
-  // Persist the new conversation state.
+  // Persist the new conversation state. A step of HANDOVER flags the chat for
+  // the dashboard Inbox and silences the bot until a human resolves it.
   await prisma.conversationSession.update({
     where: { phone },
     data: {
       step: result.step,
       draft: JSON.stringify(result.draft),
+      handover: result.step === "HANDOVER",
       lastActivity: new Date(),
     },
   });

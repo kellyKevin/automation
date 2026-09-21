@@ -4,6 +4,7 @@
 // dashboard needs — and never a competing catalogue.
 
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../src/lib/auth/password";
 
 const prisma = new PrismaClient();
 
@@ -15,11 +16,13 @@ async function main() {
     update: {},
   });
 
-  // A first staff/owner user (edit the phone to the real owner number).
+  // A first staff/owner user with a dashboard login. Set STAFF_DEFAULT_PASSWORD
+  // in the env (defaults to "farmcity" for local dev — change before launch).
+  const ownerPassword = hashPassword(process.env.STAFF_DEFAULT_PASSWORD || "farmcity");
   await prisma.staffUser.upsert({
     where: { phone: "254711911690" },
-    create: { name: "Farm City Owner", role: "owner", phone: "254711911690" },
-    update: {},
+    create: { name: "Farm City Owner", role: "owner", phone: "254711911690", passwordHash: ownerPassword },
+    update: { passwordHash: ownerPassword },
   });
 
   console.log(

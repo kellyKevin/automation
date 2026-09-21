@@ -56,6 +56,7 @@ CREATE TABLE "StaffUser" (
     "role" TEXT NOT NULL,
     "phone" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
+    "passwordHash" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "StaffUser_pkey" PRIMARY KEY ("id")
@@ -155,6 +156,8 @@ CREATE TABLE "ConversationSession" (
     "phone" TEXT NOT NULL,
     "step" TEXT NOT NULL DEFAULT 'IDLE',
     "draft" TEXT,
+    "handover" BOOLEAN NOT NULL DEFAULT false,
+    "assignedTo" TEXT,
     "lastActivity" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
