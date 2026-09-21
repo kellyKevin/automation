@@ -166,6 +166,7 @@ model Payment {
   method     String // MPESA | CASH_ON_DELIVERY | BANK
   amount     Float
   mpesaCode  String?
+  checkoutRequestId String? // Daraja STK CheckoutRequestID (async match)
   status     String    @default("PENDING") // PENDING | VERIFIED | FAILED | REFUNDED
   verifiedBy String?
   verifiedAt DateTime?
@@ -174,6 +175,7 @@ model Payment {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+  @@index([checkoutRequestId])
 }
 
 model StatusHistory {

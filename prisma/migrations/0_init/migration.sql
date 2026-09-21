@@ -130,6 +130,7 @@ CREATE TABLE "Payment" (
     "method" TEXT NOT NULL,
     "amount" DOUBLE PRECISION NOT NULL,
     "mpesaCode" TEXT,
+    "checkoutRequestId" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "verifiedBy" TEXT,
     "verifiedAt" TIMESTAMP(3),
@@ -255,6 +256,9 @@ CREATE UNIQUE INDEX "Delivery_orderId_key" ON "Delivery"("orderId");
 
 -- CreateIndex
 CREATE INDEX "Payment_orderId_idx" ON "Payment"("orderId");
+
+-- CreateIndex
+CREATE INDEX "Payment_checkoutRequestId_idx" ON "Payment"("checkoutRequestId");
 
 -- CreateIndex
 CREATE INDEX "StatusHistory_orderId_idx" ON "StatusHistory"("orderId");
