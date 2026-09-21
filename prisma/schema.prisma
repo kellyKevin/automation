@@ -5,18 +5,21 @@
 // nothing is ever silently overwritten. Prices and product names are copied
 // onto the order at order time so later catalogue changes never rewrite history.
 //
-// SQLite is used for local development (see DATABASE_URL). Enums are modelled as
-// String columns with values validated in application code (see src/domain),
-// because SQLite does not support native enums — the same schema then works
-// unchanged on Postgres.
+// The database is Postgres (Supabase in production). Enums are modelled as
+// String columns validated in application code (see src/domain) rather than
+// native Postgres enums, to keep status vocabularies easy to evolve.
+// Both repos (site + dashboard) share this schema and one database.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled (PgBouncer) connection used by the app at runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection used for migrations (Prisma needs a non-pooled URL).
+  directUrl = env("DIRECT_URL")
 }
 
 // --- Catalogue -------------------------------------------------------------
