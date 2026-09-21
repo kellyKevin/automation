@@ -108,6 +108,7 @@ model Order {
   total         Float    @default(0)
   notes         String?
   linkedOrderId String? // for mixed carts split into two linked orders
+  remindedAt    DateTime? // when a payment reminder was last sent (Part 5)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
