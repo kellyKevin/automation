@@ -30,6 +30,7 @@ model Product {
   name         String
   category     String // produce | seedling | grocery
   variety      String? // e.g. seedling variety
+  subCategory  String? // storefront filter sub-category
   unit         String // kg | tray | piece | punnet
   price        Float
   stock        Float    @default(0)

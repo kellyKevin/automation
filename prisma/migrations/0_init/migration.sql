@@ -5,6 +5,7 @@ CREATE TABLE "Product" (
     "name" TEXT NOT NULL,
     "category" TEXT NOT NULL,
     "variety" TEXT,
+    "subCategory" TEXT,
     "unit" TEXT NOT NULL,
     "price" DOUBLE PRECISION NOT NULL,
     "stock" DOUBLE PRECISION NOT NULL DEFAULT 0,
