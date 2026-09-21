@@ -229,10 +229,15 @@ model BulkQuote {
   id           String   @id @default(cuid())
   customerId   String?
   organisation String?
+  type          String?
+  contactPerson String?
+  phone         String?
+  email         String?
   itemsSummary String
   quantity     String?
   frequency    String?
   location     String?
+  notes        String?
   status       String   @default("NEW") // NEW | QUOTED | WON | LOST
   assignedTo   String?
   quotedAmount Float?
