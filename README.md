@@ -131,6 +131,12 @@ if they go quiet for an hour and come back.
 
 ### Connecting a live WhatsApp number (Meta Cloud API)
 
+> 📖 For a full click-by-click walkthrough — creating the Meta app, using the
+> free test number, tunnelling your local webhook, getting a permanent token,
+> business verification, the messaging rules, and troubleshooting — see
+> [`docs/whatsapp-setup.md`](docs/whatsapp-setup.md). The summary below is the
+> short version.
+
 1. In the [Meta for Developers](https://developers.facebook.com/) console, create
    an app and add the **WhatsApp** product. Note the **Phone number ID** (not the
    phone number itself) and generate a **permanent** access token (via a System
