@@ -16,11 +16,71 @@ export interface InboundMessage {
   type: string;
 }
 
+// Minimal shapes for the parts of Meta's webhook payload we read.
+interface RawReply {
+  id?: string;
+  title?: string;
+}
+interface RawMessage {
+  from?: string;
+  id?: string;
+  type?: string;
+  text?: { body?: string };
+  interactive?: { button_reply?: RawReply; list_reply?: RawReply };
+  button?: { text?: string; payload?: string };
+}
+interface RawStatus {
+  id?: string;
+  status?: string;
+  recipient_id?: string;
+  timestamp?: string;
+}
+interface RawValue {
+  contacts?: { wa_id?: string; profile?: { name?: string } }[];
+  messages?: RawMessage[];
+  statuses?: RawStatus[];
+}
+interface RawBody {
+  entry?: { changes?: { value?: RawValue }[] }[];
+}
+
+/** A delivery-status receipt for a message we sent (sent/delivered/read/failed). */
+export interface StatusReceipt {
+  /** The Cloud API message id (matches MessageLog.waMessageId). */
+  id: string;
+  status: string;
+  recipient?: string;
+  timestamp?: string;
+}
+
+/** Extract delivery-status receipts from a webhook body (empty for message
+ * payloads). Lets us record whether our outbound messages were delivered. */
+export function parseStatuses(body: unknown): StatusReceipt[] {
+  const out: StatusReceipt[] = [];
+  const entries = (body as RawBody)?.entry;
+  if (!Array.isArray(entries)) return out;
+  for (const entry of entries) {
+    for (const change of entry?.changes ?? []) {
+      for (const s of change?.value?.statuses ?? []) {
+        if (s?.id && s?.status) {
+          out.push({
+            id: s.id,
+            status: s.status,
+            recipient: s.recipient_id,
+            timestamp: s.timestamp,
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /** Extract inbound messages from a webhook body. Usually 0 or 1, but the API
  * batches, so return an array. Status-only callbacks yield []. */
 export function parseInbound(body: unknown): InboundMessage[] {
   const out: InboundMessage[] = [];
-  const entries = (body as any)?.entry;
+  const entries = (body as RawBody)?.entry;
   if (!Array.isArray(entries)) return out;
 
   for (const entry of entries) {

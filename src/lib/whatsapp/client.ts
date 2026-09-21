@@ -1,4 +1,5 @@
 import type { OutboundMessage } from "./messages";
+import { DEFAULT_TEMPLATE_LANGUAGE, type TemplateName } from "./templates";
 
 export interface WhatsAppConfig {
   token: string;
@@ -69,20 +70,36 @@ export function toCloudApiPayload(
   }
 }
 
-/**
- * Send a message via the WhatsApp Cloud API. When credentials are not
- * configured (local dev), it logs the payload and resolves without error, so
- * the whole flow can be exercised without a live Meta app.
- */
-export async function sendMessage(
+/** Build a Cloud API template message payload (used outside the 24h window). */
+export function toTemplatePayload(
   to: string,
-  msg: OutboundMessage,
-  cfg: WhatsAppConfig | null = configFromEnv(),
-): Promise<{ sent: boolean; id?: string }> {
-  const payload = toCloudApiPayload(to, msg);
+  name: TemplateName,
+  bodyParams: string[] = [],
+  language: string = DEFAULT_TEMPLATE_LANGUAGE,
+): Record<string, unknown> {
+  const components =
+    bodyParams.length > 0
+      ? [
+          {
+            type: "body",
+            parameters: bodyParams.map((text) => ({ type: "text", text })),
+          },
+        ]
+      : [];
+  return {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: { name, language: { code: language }, components },
+  };
+}
 
+/** POST a payload to the Cloud API, or dry-run when no credentials are set. */
+async function postToCloud(
+  payload: Record<string, unknown>,
+  cfg: WhatsAppConfig | null,
+): Promise<{ sent: boolean; id?: string }> {
   if (!cfg) {
-    // eslint-disable-next-line no-console
     console.info("[whatsapp:dry-run]", JSON.stringify(payload));
     return { sent: false };
   }
@@ -101,6 +118,32 @@ export async function sendMessage(
     const detail = await res.text().catch(() => "");
     throw new Error(`WhatsApp send failed (${res.status}): ${detail}`);
   }
-  const data = (await res.json().catch(() => ({}))) as any;
+  const data = (await res.json().catch(() => ({}))) as {
+    messages?: { id?: string }[];
+  };
   return { sent: true, id: data?.messages?.[0]?.id };
+}
+
+/**
+ * Send a free-form message via the WhatsApp Cloud API (only valid inside the
+ * 24-hour window). When credentials are not configured (local dev), it logs the
+ * payload and resolves without error, so the flow can be exercised offline.
+ */
+export async function sendMessage(
+  to: string,
+  msg: OutboundMessage,
+  cfg: WhatsAppConfig | null = configFromEnv(),
+): Promise<{ sent: boolean; id?: string }> {
+  return postToCloud(toCloudApiPayload(to, msg), cfg);
+}
+
+/** Send a pre-approved template message (valid outside the 24-hour window). */
+export async function sendTemplate(
+  to: string,
+  name: TemplateName,
+  bodyParams: string[] = [],
+  language: string = DEFAULT_TEMPLATE_LANGUAGE,
+  cfg: WhatsAppConfig | null = configFromEnv(),
+): Promise<{ sent: boolean; id?: string }> {
+  return postToCloud(toTemplatePayload(to, name, bodyParams, language), cfg);
 }
