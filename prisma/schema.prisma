@@ -33,6 +33,7 @@ model Product {
   unit         String // kg | tray | piece | punnet
   price        Float
   stock        Float    @default(0)
+  reserved     Float    @default(0) // held by open orders; available = stock - reserved
   available    Boolean  @default(true)
   origin       String // JUJA_HUB | ELDORET_NURSERY
   description  String?

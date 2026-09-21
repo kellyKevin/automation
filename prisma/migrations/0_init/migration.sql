@@ -8,6 +8,7 @@ CREATE TABLE "Product" (
     "unit" TEXT NOT NULL,
     "price" DOUBLE PRECISION NOT NULL,
     "stock" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "reserved" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "available" BOOLEAN NOT NULL DEFAULT true,
     "origin" TEXT NOT NULL,
     "description" TEXT,

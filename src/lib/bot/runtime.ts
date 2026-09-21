@@ -13,6 +13,7 @@ import {
   recordMpesaCode,
 } from "@/lib/orders/service";
 import { orderConfirmationMessages, teamAlertMessage } from "@/lib/orders/messages";
+import { availableStock } from "@/lib/orders/stock";
 import { ksh } from "@/lib/money";
 
 async function loadCatalog(): Promise<Catalog> {
@@ -29,7 +30,8 @@ async function loadCatalog(): Promise<Catalog> {
       unit: p.unit,
       price: p.price,
       available: p.available,
-      stock: p.stock,
+      // What the bot can sell = physical stock minus what open orders hold.
+      stock: availableStock(p.stock, p.reserved),
       origin: p.origin,
     })),
     zones: zones.map((z) => ({
