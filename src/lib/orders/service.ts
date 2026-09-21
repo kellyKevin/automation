@@ -4,6 +4,7 @@ import { computeTotals, type Totals } from "@/lib/bot/pricing";
 import type { OrderDraft, DraftItem, DraftDelivery, CompletedSegment } from "@/lib/bot/types";
 import { canTransition, type OrderStatus } from "@/domain";
 import { formatOrderNumber } from "./number";
+import { holdsReservation } from "./stock";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
@@ -84,15 +85,37 @@ function buildOrderData(
   };
 }
 
+/** Reserve stock when an order is created (holds it without deducting). */
 async function reserveStock(tx: Tx, items: DraftItem[]): Promise<void> {
   for (const it of items) {
     if (it.slug) {
       await tx.product
-        .update({ where: { slug: it.slug }, data: { stock: { decrement: it.quantity } } })
+        .update({ where: { slug: it.slug }, data: { reserved: { increment: it.quantity } } })
         .catch(() => {
           /* unknown slug — ignore, item priced 0 anyway */
         });
     }
+  }
+}
+
+/**
+ * Adjust the reservation for an order's items:
+ *  - "fulfil"  (on packing): deduct physical stock and clear the reservation.
+ *  - "release" (on cancel / unpaid lapse): return the reservation only.
+ */
+async function adjustReservation(
+  tx: Tx,
+  orderId: string,
+  mode: "fulfil" | "release",
+): Promise<void> {
+  const items = await tx.orderItem.findMany({ where: { orderId } });
+  for (const it of items) {
+    if (!it.productId) continue;
+    const data =
+      mode === "fulfil"
+        ? { stock: { decrement: it.quantity }, reserved: { decrement: it.quantity } }
+        : { reserved: { decrement: it.quantity } };
+    await tx.product.update({ where: { id: it.productId }, data }).catch(() => {});
   }
 }
 
@@ -185,8 +208,50 @@ export async function changeOrderStatus(
     await tx.statusHistory.create({
       data: { orderId, oldStatus: from, newStatus: to, changedBy },
     });
+
+    // Stock lifecycle: packing fulfils the reservation (deducts stock);
+    // cancelling before packing releases it back.
+    if (to === "PACKED") {
+      await adjustReservation(tx, orderId, "fulfil");
+    } else if (to === "CANCELLED" && holdsReservation(from)) {
+      await adjustReservation(tx, orderId, "release");
+    }
+
     return { ok: true, from };
   });
+}
+
+/**
+ * Release stock held by unpaid orders older than the limit and put them on hold
+ * (Part 10). Intended to be run periodically (see /api/jobs/release-unpaid).
+ * Returns the number of orders lapsed.
+ */
+export async function releaseUnpaidOrders(olderThanMinutes: number): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+  const orders = await prisma.order.findMany({
+    where: {
+      paymentStatus: "PENDING",
+      status: { in: ["NEW", "CONFIRMED"] },
+      createdAt: { lt: cutoff },
+    },
+    select: { id: true, status: true },
+  });
+
+  for (const o of orders) {
+    await prisma.$transaction(async (tx) => {
+      await adjustReservation(tx, o.id, "release");
+      await tx.order.update({ where: { id: o.id }, data: { status: "ON_HOLD" } });
+      await tx.statusHistory.create({
+        data: {
+          orderId: o.id,
+          oldStatus: o.status,
+          newStatus: "ON_HOLD",
+          changedBy: "system:unpaid-timeout",
+        },
+      });
+    });
+  }
+  return orders.length;
 }
 
 /** Record an M-Pesa code against an order's most recent (or new) payment. */
