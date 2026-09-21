@@ -1,5 +1,40 @@
 import { describe, it, expect } from "vitest";
-import { parseProductUpdate } from "./update";
+import { parseProductUpdate, parseProductCreate, slugify } from "./update";
+
+describe("slugify", () => {
+  it("makes a URL-safe slug", () => {
+    expect(slugify("Grafted Hass Avocado Seedlings")).toBe("grafted-hass-avocado-seedlings");
+    expect(slugify("Kale / Sukuma Wiki")).toBe("kale-sukuma-wiki");
+  });
+});
+
+describe("parseProductCreate", () => {
+  it("accepts a valid product and derives slug + origin", () => {
+    const r = parseProductCreate({ name: "Test Mango", category: "produce", unit: "kg", price: 90, stock: 12 });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data).toMatchObject({
+        slug: "test-mango",
+        name: "Test Mango",
+        category: "produce",
+        origin: "JUJA_HUB",
+        unit: "kg",
+        price: 90,
+        stock: 12,
+        available: true,
+      });
+    }
+  });
+  it("routes seedlings to the nursery origin", () => {
+    const r = parseProductCreate({ name: "Apple Seedling", category: "seedling", unit: "seedling", price: 1000 });
+    expect(r.ok && r.data.origin).toBe("ELDORET_NURSERY");
+  });
+  it("rejects missing/invalid fields", () => {
+    expect(parseProductCreate({ category: "produce", unit: "kg", price: 1 }).ok).toBe(false);
+    expect(parseProductCreate({ name: "x", category: "food", unit: "kg", price: 1 }).ok).toBe(false);
+    expect(parseProductCreate({ name: "x", category: "produce", unit: "kg", price: -1 }).ok).toBe(false);
+  });
+});
 
 describe("parseProductUpdate", () => {
   it("accepts valid price / stock / available / imageUrl", () => {
