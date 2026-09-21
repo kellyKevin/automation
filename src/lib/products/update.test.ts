@@ -61,6 +61,29 @@ describe("parseProductUpdate", () => {
     expect(parseProductUpdate({ available: "yes" }).ok).toBe(false);
   });
 
+  it("edits descriptive fields and keeps origin in step with category", () => {
+    const r = parseProductUpdate({ name: "New Name", category: "seedling", unit: "seedling", subCategory: "Fruit Seedlings", variety: "Hass" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data).toMatchObject({
+        name: "New Name",
+        category: "seedling",
+        origin: "ELDORET_NURSERY",
+        unit: "seedling",
+        subCategory: "Fruit Seedlings",
+        variety: "Hass",
+      });
+    }
+  });
+  it("rejects an invalid category or empty name", () => {
+    expect(parseProductUpdate({ category: "food" }).ok).toBe(false);
+    expect(parseProductUpdate({ name: "  " }).ok).toBe(false);
+  });
+  it("clears nullable fields with empty string", () => {
+    const r = parseProductUpdate({ variety: "" });
+    expect(r.ok && r.data.variety).toBeNull();
+  });
+
   it("rejects an empty update", () => {
     expect(parseProductUpdate({}).ok).toBe(false);
     expect(parseProductUpdate(null).ok).toBe(false);
