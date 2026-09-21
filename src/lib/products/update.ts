@@ -2,6 +2,13 @@
 // image). Pure so it is easy to test and shared by the API route.
 
 export interface ProductUpdate {
+  name?: string;
+  category?: string;
+  origin?: string;
+  subCategory?: string | null;
+  unit?: string;
+  variety?: string | null;
+  description?: string | null;
   price?: number;
   stock?: number;
   available?: boolean;
@@ -121,6 +128,39 @@ export function parseProductUpdate(input: unknown): ParseResult {
       return { ok: false, error: "imageUrl must be a string" };
     }
   }
+
+  if (b.name !== undefined) {
+    if (typeof b.name !== "string" || !b.name.trim()) {
+      return { ok: false, error: "name must be a non-empty string" };
+    }
+    data.name = b.name.trim();
+  }
+
+  if (b.category !== undefined) {
+    if (b.category !== "produce" && b.category !== "seedling") {
+      return { ok: false, error: "category must be 'produce' or 'seedling'" };
+    }
+    data.category = b.category;
+    // Keep the origin in step with the category.
+    data.origin = b.category === "seedling" ? "ELDORET_NURSERY" : "JUJA_HUB";
+  }
+
+  if (b.unit !== undefined) {
+    if (typeof b.unit !== "string" || !b.unit.trim()) {
+      return { ok: false, error: "unit must be a non-empty string" };
+    }
+    data.unit = b.unit.trim();
+  }
+
+  const nullableStr = (key: "subCategory" | "variety" | "description") => {
+    const v = b[key];
+    if (v === undefined) return;
+    if (v === null || v === "") data[key] = null;
+    else if (typeof v === "string") data[key] = v.trim();
+  };
+  nullableStr("subCategory");
+  nullableStr("variety");
+  nullableStr("description");
 
   if (Object.keys(data).length === 0) {
     return { ok: false, error: "No updatable fields provided" };
