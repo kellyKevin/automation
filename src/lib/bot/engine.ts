@@ -41,7 +41,7 @@ export function handleTurn(input: EngineInput): EngineResult {
   switch (input.step) {
     case "IDLE":
     case "DONE":
-      return start(input, draft);
+      return start(input);
     case "CONFIRM_ITEMS":
       return confirmItems(input, draft);
     case "ASK_NAME":
@@ -69,13 +69,13 @@ export function handleTurn(input: EngineInput): EngineResult {
     case "AWAIT_PAYMENT":
       return awaitPayment(input, draft);
     default:
-      return start(input, draft);
+      return start(input);
   }
 }
 
 // --- Step: start ------------------------------------------------------------
 
-function start(input: EngineInput, _draft: OrderDraft): EngineResult {
+function start(input: EngineInput): EngineResult {
   const parsed = parseOrderMessage(input.text ?? "");
   if (parsed.items.length === 0) {
     // Not an order — offer the enquiry menu, stay idle.
@@ -119,7 +119,7 @@ function start(input: EngineInput, _draft: OrderDraft): EngineResult {
     };
   }
 
-  const replies: OutboundMessage[] = [text(itemsSummaryText(draft, input))];
+  const replies: OutboundMessage[] = [text(itemsSummaryText(draft))];
   replies.push(
     buttons("Is this correct?", [
       { id: "items_yes", title: "✅ Yes, continue" },
@@ -162,7 +162,7 @@ function confirmItems(input: EngineInput, draft: OrderDraft): EngineResult {
         step: "CONFIRM_ITEMS",
         draft: next,
         replies: [
-          text(itemsSummaryText(next, input)),
+          text(itemsSummaryText(next)),
           buttons("Is this correct?", [
             { id: "items_yes", title: "✅ Yes, continue" },
             { id: "items_change", title: "✏️ Change items" },
@@ -487,7 +487,7 @@ function summaryStep(input: EngineInput, draft: OrderDraft): EngineResult {
       step: "CONFIRM_ITEMS",
       draft: { ...draft, retries: 0 },
       replies: [
-        text(itemsSummaryText(draft, input)),
+        text(itemsSummaryText(draft)),
         buttons("What would you like to do?", [
           { id: "items_yes", title: "✅ Keep items" },
           { id: "items_change", title: "✏️ Change items" },
@@ -607,7 +607,7 @@ export function detectPath(items: DraftItem[], catalog: Catalog): "produce" | "s
   return categories.has("seedling") ? "seedling" : "produce";
 }
 
-function itemsSummaryText(draft: OrderDraft, _input: EngineInput): string {
+function itemsSummaryText(draft: OrderDraft): string {
   const lines = draft.items.map((it) => {
     const price = it.resolved ? ` — ${ksh(it.quantity * it.unitPrice)}` : "";
     const stock = it.available ? "" : it.resolved ? " (out of stock)" : " (we'll price this for you)";

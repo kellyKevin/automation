@@ -42,6 +42,7 @@ CREATE TABLE "Customer" (
     "defaultAddress" TEXT,
     "optedOut" BOOLEAN NOT NULL DEFAULT false,
     "firstOrderAt" TIMESTAMP(3),
+    "lastInboundAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -168,6 +169,8 @@ CREATE TABLE "MessageLog" (
     "direction" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "messageType" TEXT NOT NULL DEFAULT 'text',
+    "waMessageId" TEXT,
+    "status" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "MessageLog_pkey" PRIMARY KEY ("id")
@@ -196,6 +199,27 @@ CREATE TABLE "Counter" (
     "value" INTEGER NOT NULL DEFAULT 0,
 
     CONSTRAINT "Counter_pkey" PRIMARY KEY ("name")
+);
+
+-- CreateTable
+CREATE TABLE "ProcessedMessage" (
+    "id" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ProcessedMessage_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OutboundQueue" (
+    "id" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "customerId" TEXT,
+    "reason" TEXT NOT NULL,
+    "payload" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "OutboundQueue_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -236,6 +260,12 @@ CREATE UNIQUE INDEX "ConversationSession_phone_key" ON "ConversationSession"("ph
 
 -- CreateIndex
 CREATE INDEX "MessageLog_phone_idx" ON "MessageLog"("phone");
+
+-- CreateIndex
+CREATE INDEX "MessageLog_waMessageId_idx" ON "MessageLog"("waMessageId");
+
+-- CreateIndex
+CREATE INDEX "OutboundQueue_status_idx" ON "OutboundQueue"("status");
 
 -- AddForeignKey
 ALTER TABLE "Order" ADD CONSTRAINT "Order_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

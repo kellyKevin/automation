@@ -3,7 +3,7 @@ import { handleTurn } from "./engine";
 import { emptyDraft } from "./types";
 import type { Catalog, EngineInput, OrderDraft } from "./types";
 import type { ConversationStep } from "@/domain";
-import type { InboundMessage } from "@/lib/whatsapp/inbound";
+import type { InboundMessage, StatusReceipt } from "@/lib/whatsapp/inbound";
 import { sendMessage } from "@/lib/whatsapp/client";
 import type { OutboundMessage } from "@/lib/whatsapp/messages";
 import {
@@ -49,6 +49,9 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
   if (!msg.from) return;
   const phone = msg.from;
 
+  // Idempotency: Meta may resend a webhook, so process each message id once.
+  if (!(await markProcessed(msg.messageId))) return;
+
   // Log the inbound message.
   await prisma.messageLog.create({
     data: {
@@ -67,10 +70,15 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     return;
   }
 
+  // Stamp the 24-hour window: this inbound message (re)opens it.
+  const now = new Date();
   const customer = await prisma.customer.upsert({
     where: { phone },
-    create: { phone, name: msg.profileName },
-    update: msg.profileName ? { name: msg.profileName } : {},
+    create: { phone, name: msg.profileName, lastInboundAt: now },
+    update: {
+      lastInboundAt: now,
+      ...(msg.profileName ? { name: msg.profileName } : {}),
+    },
   });
 
   const session = await prisma.conversationSession.upsert({
@@ -173,6 +181,18 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
   await reply(phone, replies);
 }
 
+/** Record delivery-status receipts (sent/delivered/read/failed) against the
+ * outbound messages we logged, matched by the Cloud API message id. */
+export async function recordDeliveryStatuses(
+  receipts: StatusReceipt[],
+): Promise<void> {
+  for (const r of receipts) {
+    await prisma.messageLog
+      .updateMany({ where: { waMessageId: r.id }, data: { status: r.status } })
+      .catch(() => {});
+  }
+}
+
 async function latestOrder(customerId: string) {
   return prisma.order.findFirst({
     where: { customerId },
@@ -182,15 +202,29 @@ async function latestOrder(customerId: string) {
 
 async function reply(phone: string, messages: OutboundMessage[]): Promise<void> {
   for (const m of messages) {
-    await sendMessage(phone, m);
+    const res = await sendMessage(phone, m);
     await prisma.messageLog.create({
       data: {
         phone,
         direction: "OUT",
         content: describe(m),
         messageType: m.kind,
+        waMessageId: res.id,
+        status: res.sent ? "sent" : null,
       },
     });
+  }
+}
+
+/** Insert the message id; returns false if it was already handled (duplicate).
+ * A message with no id can't be de-duplicated, so it is always processed. */
+async function markProcessed(messageId: string): Promise<boolean> {
+  if (!messageId) return true;
+  try {
+    await prisma.processedMessage.create({ data: { id: messageId } });
+    return true;
+  } catch {
+    return false;
   }
 }
 

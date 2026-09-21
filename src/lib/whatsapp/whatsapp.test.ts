@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import crypto from "node:crypto";
 import { verifySignature, verifyWebhookChallenge } from "./verify";
-import { parseInbound } from "./inbound";
-import { toCloudApiPayload } from "./client";
+import { parseInbound, parseStatuses } from "./inbound";
+import { toCloudApiPayload, toTemplatePayload } from "./client";
 import { text, buttons, list } from "./messages";
 
 describe("verifySignature", () => {
@@ -96,15 +96,73 @@ describe("toCloudApiPayload", () => {
   });
 
   it("builds an interactive buttons payload", () => {
-    const p: any = toCloudApiPayload("254", buttons("pick", [{ id: "a", title: "A" }]));
-    expect(p.type).toBe("interactive");
-    expect(p.interactive.type).toBe("button");
-    expect(p.interactive.action.buttons[0].reply).toEqual({ id: "a", title: "A" });
+    expect(toCloudApiPayload("254", buttons("pick", [{ id: "a", title: "A" }]))).toMatchObject({
+      type: "interactive",
+      interactive: {
+        type: "button",
+        action: { buttons: [{ reply: { id: "a", title: "A" } }] },
+      },
+    });
   });
 
   it("builds a list payload", () => {
-    const p: any = toCloudApiPayload("254", list("where", "Choose", [{ id: "z", title: "Zone" }]));
-    expect(p.interactive.type).toBe("list");
-    expect(p.interactive.action.sections[0].rows[0].id).toBe("z");
+    expect(toCloudApiPayload("254", list("where", "Choose", [{ id: "z", title: "Zone" }]))).toMatchObject({
+      interactive: {
+        type: "list",
+        action: { sections: [{ rows: [{ id: "z" }] }] },
+      },
+    });
+  });
+});
+
+describe("parseStatuses", () => {
+  it("extracts delivery receipts", () => {
+    const body = {
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                statuses: [
+                  { id: "wamid.9", status: "delivered", recipient_id: "254712345678", timestamp: "123" },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    expect(parseStatuses(body)).toEqual([
+      { id: "wamid.9", status: "delivered", recipient: "254712345678", timestamp: "123" },
+    ]);
+  });
+
+  it("returns [] for a message payload", () => {
+    const body = {
+      entry: [{ changes: [{ value: { messages: [{ from: "1", id: "x", type: "text" }] } }] }],
+    };
+    expect(parseStatuses(body)).toEqual([]);
+  });
+});
+
+describe("toTemplatePayload", () => {
+  it("builds a template payload with ordered body params", () => {
+    expect(toTemplatePayload("254", "payment_received", ["FC-0007"])).toMatchObject({
+      messaging_product: "whatsapp",
+      to: "254",
+      type: "template",
+      template: {
+        name: "payment_received",
+        language: { code: "en" },
+        components: [{ type: "body", parameters: [{ type: "text", text: "FC-0007" }] }],
+      },
+    });
+  });
+
+  it("omits components when the template has no variables", () => {
+    expect(toTemplatePayload("254", "order_delivered")).toMatchObject({
+      type: "template",
+      template: { name: "order_delivered", components: [] },
+    });
   });
 });

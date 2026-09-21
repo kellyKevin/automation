@@ -69,6 +69,7 @@ model Customer {
   defaultAddress String?
   optedOut       Boolean  @default(false)
   firstOrderAt   DateTime?
+  lastInboundAt  DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -207,11 +208,14 @@ model MessageLog {
   direction   String // IN | OUT
   content     String
   messageType String   @default("text") // text | button | list | image | template
+  waMessageId String?  // Cloud API message id, for delivery receipts
+  status      String?  // sent | delivered | read | failed (outbound)
   createdAt   DateTime @default(now())
 
   customer Customer? @relation(fields: [customerId], references: [id])
 
   @@index([phone])
+  @@index([waMessageId])
 }
 
 model BulkQuote {
@@ -235,4 +239,25 @@ model BulkQuote {
 model Counter {
   name  String @id
   value Int    @default(0)
+}
+
+// Records every inbound WhatsApp message id we have handled, so a message Meta
+// resends is processed only once (webhook idempotency).
+model ProcessedMessage {
+  id        String   @id // the WhatsApp message id (wamid)
+  createdAt DateTime @default(now())
+}
+
+// Messages that could not be sent immediately (24h window closed and no
+// matching template) are queued here and a person is alerted.
+model OutboundQueue {
+  id         String   @id @default(cuid())
+  phone      String
+  customerId String?
+  reason     String // why it was queued, e.g. window_closed_no_template
+  payload    String // JSON of the intended message
+  status     String   @default("PENDING") // PENDING | SENT | CANCELLED
+  createdAt  DateTime @default(now())
+
+  @@index([status])
 }
