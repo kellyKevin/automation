@@ -8,10 +8,12 @@ import { sendMessage } from "@/lib/whatsapp/client";
 import type { OutboundMessage } from "@/lib/whatsapp/messages";
 import {
   createOrderFromDraft,
+  createLinkedOrders,
   markCashOnDelivery,
   recordMpesaCode,
 } from "@/lib/orders/service";
 import { orderConfirmationMessages, teamAlertMessage } from "@/lib/orders/messages";
+import { ksh } from "@/lib/money";
 
 async function loadCatalog(): Promise<Catalog> {
   const [products, zones] = await Promise.all([
@@ -87,6 +89,10 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     update: { customerId: customer.id, lastActivity: new Date() },
   });
 
+  // If a human has taken over this chat, the bot stays quiet (Part 8.5). The
+  // message is already logged, so it appears in the dashboard Inbox.
+  if (session.handover) return;
+
   const draft: OrderDraft = session.draft
     ? (JSON.parse(session.draft) as OrderDraft)
     : emptyDraft();
@@ -141,6 +147,43 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         break;
       }
 
+      case "CREATE_LINKED_ORDERS": {
+        const orders = await createLinkedOrders(customer.id, effect.segments, {
+          ref: effect.ref,
+        });
+        const paybill = process.env.MPESA_PAYBILL || "000000";
+        const combined = orders.reduce((s, o) => s + o.total, 0);
+        const refs = orders.map((o) => o.number).join(" and ");
+        replies.push(
+          textMsg(`✅ Your cart ships from two places, so I've created ${orders.length} linked orders:`),
+        );
+        for (const o of orders) {
+          const label = o.origin === "ELDORET_NURSERY" ? "Seedlings" : "Fresh produce";
+          replies.push(textMsg(`• ${label}: ${o.number} — ${ksh(o.total)}`));
+        }
+        replies.push({
+          kind: "buttons",
+          body:
+            `To complete both orders, pay ${ksh(combined)} via M-Pesa:\n` +
+            `Paybill: ${paybill}\nUse reference ${refs}.\n\n` +
+            `Reply here with the M-Pesa confirmation once done.`,
+          buttons: [
+            { id: "pay_paid", title: "\u{1F4B3} I've paid" },
+            { id: "pay_cod", title: "\u{1F4B5} Pay on delivery" },
+            { id: "pay_help", title: "❓ Need help" },
+          ],
+        });
+        await alertTeam(
+          teamAlertMessage(
+            orders.map((o) => o.number).join(" + "),
+            combined,
+            effect.customerName ?? customer.name ?? undefined,
+            effect.segments.reduce((n, s) => n + s.items.length, 0),
+          ),
+        );
+        break;
+      }
+
       case "RECORD_MPESA_CODE": {
         const order = await latestOrder(customer.id);
         if (order) await recordMpesaCode(order.id, effect.code);
@@ -168,12 +211,14 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
     }
   }
 
-  // Persist the new conversation state.
+  // Persist the new conversation state. A step of HANDOVER flags the chat for
+  // the dashboard Inbox and silences the bot until a human resolves it.
   await prisma.conversationSession.update({
     where: { phone },
     data: {
       step: result.step,
       draft: JSON.stringify(result.draft),
+      handover: result.step === "HANDOVER",
       lastActivity: new Date(),
     },
   });

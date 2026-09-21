@@ -56,6 +56,15 @@ export interface DraftDelivery {
   timeWindow?: string;
 }
 
+// A finished part of a mixed cart (produce or seedling), ready to become one
+// of the two linked orders.
+export interface CompletedSegment {
+  path: "produce" | "seedling";
+  origin: Origin;
+  items: DraftItem[];
+  delivery: DraftDelivery;
+}
+
 export interface OrderDraft {
   ref?: string;
   path?: "produce" | "seedling" | "mixed";
@@ -66,6 +75,14 @@ export interface OrderDraft {
   bulk?: boolean;
   /** Consecutive unrecognised replies at the current step. */
   retries?: number;
+  // --- Mixed-cart split (Part 2.4) ---
+  /** True while a mixed cart is being collected as two linked orders. */
+  mixed?: boolean;
+  /** Items for the segment not yet being filled (collected after this one). */
+  pendingItems?: DraftItem[];
+  pendingPath?: "produce" | "seedling";
+  /** Segments already finished, awaiting the final confirmation. */
+  completedSegments?: CompletedSegment[];
 }
 
 export function emptyDraft(): OrderDraft {
@@ -94,6 +111,12 @@ export interface EngineInput {
 export type Effect =
   | { type: "SAVE_CUSTOMER_NAME"; name: string }
   | { type: "CREATE_ORDER"; draft: OrderDraft }
+  | {
+      type: "CREATE_LINKED_ORDERS";
+      segments: CompletedSegment[];
+      ref?: string;
+      customerName?: string;
+    }
   | { type: "RECORD_MPESA_CODE"; code: string }
   | { type: "MARK_CASH_ON_DELIVERY" }
   | { type: "CREATE_BULK_QUOTE"; draft: OrderDraft }

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { computeTotals } from "@/lib/bot/pricing";
-import type { OrderDraft } from "@/lib/bot/types";
+import { computeTotals, type Totals } from "@/lib/bot/pricing";
+import type { OrderDraft, DraftItem, DraftDelivery, CompletedSegment } from "@/lib/bot/types";
 import { canTransition, type OrderStatus } from "@/domain";
 import { formatOrderNumber } from "./number";
 
@@ -23,6 +23,84 @@ export interface CreateOrderResult {
   orderId: string;
   number: string;
   total: number;
+  origin: string;
+}
+
+// The order-level fields one order is built from (a whole draft or a segment).
+interface OrderSource {
+  ref?: string;
+  origin?: string;
+  bulk?: boolean;
+  items: DraftItem[];
+  delivery: DraftDelivery;
+}
+
+function buildOrderData(
+  number: string,
+  customerId: string,
+  src: OrderSource,
+  totals: Totals,
+) {
+  return {
+    number,
+    customerId,
+    source: "website_cart",
+    cartRef: src.ref,
+    origin: src.origin ?? "JUJA_HUB",
+    status: "NEW",
+    paymentStatus: "PENDING",
+    subtotal: totals.subtotal,
+    discount: totals.discount,
+    deliveryFee: totals.deliveryFee,
+    total: totals.total,
+    notes: src.bulk ? "Bulk order — review pricing" : undefined,
+    items: {
+      create: src.items.map((it) => ({
+        productName: it.name,
+        variety: undefined,
+        quantity: it.quantity,
+        unit: it.unit,
+        unitPrice: it.unitPrice,
+        lineTotal: Math.round((it.quantity * it.unitPrice + Number.EPSILON) * 100) / 100,
+        product: it.slug ? { connect: { slug: it.slug } } : undefined,
+      })),
+    },
+    delivery: {
+      create: {
+        method: src.delivery.method ?? "LOCAL_RIDER",
+        zoneId: src.delivery.zoneId,
+        address: src.delivery.address,
+        landmark: src.delivery.landmark,
+        county: src.delivery.county,
+        town: src.delivery.town,
+        receiverName: src.delivery.receiverName,
+        receiverPhone: src.delivery.receiverPhone,
+        timeWindow: src.delivery.timeWindow,
+      },
+    },
+    statusHistory: {
+      create: { oldStatus: null, newStatus: "NEW", changedBy: "bot" },
+    },
+  };
+}
+
+async function reserveStock(tx: Tx, items: DraftItem[]): Promise<void> {
+  for (const it of items) {
+    if (it.slug) {
+      await tx.product
+        .update({ where: { slug: it.slug }, data: { stock: { decrement: it.quantity } } })
+        .catch(() => {
+          /* unknown slug — ignore, item priced 0 anyway */
+        });
+    }
+  }
+}
+
+async function stampFirstOrder(tx: Tx, customerId: string): Promise<void> {
+  const customer = await tx.customer.findUnique({ where: { id: customerId } });
+  if (customer && !customer.firstOrderAt) {
+    await tx.customer.update({ where: { id: customerId }, data: { firstOrderAt: new Date() } });
+  }
 }
 
 /**
@@ -35,76 +113,58 @@ export async function createOrderFromDraft(
   draft: OrderDraft,
 ): Promise<CreateOrderResult> {
   const totals = computeTotals(draft.items, draft.delivery.fee ?? 0);
+  const src: OrderSource = {
+    ref: draft.ref,
+    origin: draft.origin,
+    bulk: draft.bulk,
+    items: draft.items,
+    delivery: draft.delivery,
+  };
 
   return prisma.$transaction(async (tx) => {
     const number = await nextOrderNumber(tx);
+    const order = await tx.order.create({ data: buildOrderData(number, customerId, src, totals) });
+    await reserveStock(tx, draft.items);
+    await stampFirstOrder(tx, customerId);
+    return { orderId: order.id, number, total: totals.total, origin: src.origin ?? "JUJA_HUB" };
+  });
+}
 
-    const order = await tx.order.create({
-      data: {
-        number,
-        customerId,
-        source: "website_cart",
-        cartRef: draft.ref,
-        origin: draft.origin ?? "JUJA_HUB",
-        status: "NEW",
-        paymentStatus: "PENDING",
-        subtotal: totals.subtotal,
-        discount: totals.discount,
-        deliveryFee: totals.deliveryFee,
-        total: totals.total,
-        notes: draft.bulk ? "Bulk order — review pricing" : undefined,
-        items: {
-          create: draft.items.map((it) => ({
-            productName: it.name,
-            variety: undefined,
-            quantity: it.quantity,
-            unit: it.unit,
-            unitPrice: it.unitPrice,
-            lineTotal: Math.round((it.quantity * it.unitPrice + Number.EPSILON) * 100) / 100,
-            product: it.slug ? { connect: { slug: it.slug } } : undefined,
-          })),
-        },
-        delivery: {
-          create: {
-            method: draft.delivery.method ?? "LOCAL_RIDER",
-            zoneId: draft.delivery.zoneId,
-            address: draft.delivery.address,
-            landmark: draft.delivery.landmark,
-            county: draft.delivery.county,
-            town: draft.delivery.town,
-            receiverName: draft.delivery.receiverName,
-            receiverPhone: draft.delivery.receiverPhone,
-            timeWindow: draft.delivery.timeWindow,
-          },
-        },
-        statusHistory: {
-          create: { oldStatus: null, newStatus: "NEW", changedBy: "bot" },
-        },
-      },
-    });
-
-    // Reserve stock for resolved catalogue items.
-    for (const it of draft.items) {
-      if (it.slug) {
-        await tx.product.update({
-          where: { slug: it.slug },
-          data: { stock: { decrement: it.quantity } },
-        }).catch(() => {
-          /* unknown slug — ignore, item priced 0 anyway */
-        });
-      }
-    }
-
-    // Stamp firstOrderAt on the customer if this is their first order.
-    const customer = await tx.customer.findUnique({ where: { id: customerId } });
-    if (customer && !customer.firstOrderAt) {
-      await tx.customer.update({
-        where: { id: customerId },
-        data: { firstOrderAt: new Date() },
+/**
+ * A mixed cart becomes two linked orders (Part 2.4): produce from Juja and
+ * seedlings from Eldoret, each with its own delivery and fee, created together
+ * and cross-linked so either order points at the other.
+ */
+export async function createLinkedOrders(
+  customerId: string,
+  segments: CompletedSegment[],
+  meta: { ref?: string } = {},
+): Promise<CreateOrderResult[]> {
+  return prisma.$transaction(async (tx) => {
+    const created: CreateOrderResult[] = [];
+    for (const seg of segments) {
+      const totals = computeTotals(seg.items, seg.delivery.fee ?? 0);
+      const number = await nextOrderNumber(tx);
+      const order = await tx.order.create({
+        data: buildOrderData(number, customerId, {
+          ref: meta.ref,
+          origin: seg.origin,
+          items: seg.items,
+          delivery: seg.delivery,
+        }, totals),
       });
+      created.push({ orderId: order.id, number, total: totals.total, origin: seg.origin });
+      await reserveStock(tx, seg.items);
     }
 
-    return { orderId: order.id, number, total: totals.total };
+    // Cross-link the pair.
+    if (created.length === 2) {
+      await tx.order.update({ where: { id: created[0].orderId }, data: { linkedOrderId: created[1].orderId } });
+      await tx.order.update({ where: { id: created[1].orderId }, data: { linkedOrderId: created[0].orderId } });
+    }
+
+    await stampFirstOrder(tx, customerId);
+    return created;
   });
 }
 

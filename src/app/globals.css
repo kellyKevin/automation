@@ -171,3 +171,14 @@ input {
   border-radius: 8px;
   font: inherit;
 }
+
+.navlink {
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  opacity: 0.95;
+}
+.navlink:hover {
+  text-decoration: underline;
+}

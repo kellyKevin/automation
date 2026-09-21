@@ -1,8 +1,12 @@
+import { redirect } from "next/navigation";
+import { getStaff } from "@/lib/auth/staff";
 import AdminClient from "./AdminClient";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const staff = await getStaff();
+  if (!staff) redirect("/login");
   return (
     <>
       <h2 className="category">Orders</h2>

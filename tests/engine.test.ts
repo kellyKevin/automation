@@ -175,11 +175,51 @@ describe("stock handling", () => {
 });
 
 describe("routing & global commands", () => {
-  it("hands mixed carts to a person", () => {
-    const c = new Convo(returning);
+  it("splits a mixed cart into two linked orders", () => {
+    const c = new Convo(returning); // returning customer, name known
     c.send({ text: "• Tomatoes x 2 kg\n• Tomato Seedling x 10 seedling\nRef: CART-MIX1" });
-    expect(c.step).toBe("HANDOVER");
-    expect(c.effects).toContain("HANDOVER");
+    // Produce segment first; seedlings pending.
+    expect(c.step).toBe("CONFIRM_ITEMS");
+    expect(c.draft.mixed).toBe(true);
+    expect(c.draft.path).toBe("produce");
+    expect(c.draft.items.map((i) => i.name)).toEqual(["Tomatoes"]);
+    expect(c.draft.pendingItems).toHaveLength(1);
+
+    // Walk the produce delivery flow.
+    c.send({ replyId: "items_yes" });
+    expect(c.step).toBe("PRODUCE_ZONE");
+    c.send({ replyId: "zone_z-juja" });
+    c.send({ text: "Greenpark Estate" });
+    c.send({ replyId: "day_today" });
+    c.send({ text: "Grace, 0712345678" });
+    expect(c.step).toBe("SUMMARY");
+
+    // Confirm produce -> moves on to the seedling segment.
+    c.send({ replyId: "sum_confirm" });
+    expect(c.step).toBe("CONFIRM_ITEMS");
+    expect(c.draft.path).toBe("seedling");
+    expect(c.draft.completedSegments).toHaveLength(1);
+
+    // Walk the seedling dispatch flow.
+    c.send({ replyId: "items_yes" });
+    expect(c.step).toBe("SEEDLING_COUNTY");
+    c.send({ text: "Uasin Gishu" });
+    c.send({ text: "Eldoret" });
+    c.send({ replyId: "method_door" });
+    c.send({ text: "Grace, 0712345678" });
+    c.send({ text: "24 Jan" });
+    expect(c.step).toBe("SUMMARY");
+
+    // Final confirm -> create both linked orders.
+    const final = c.send({ replyId: "sum_confirm" });
+    expect(c.step).toBe("AWAIT_PAYMENT");
+    const linked = final.effects.find((e) => e.type === "CREATE_LINKED_ORDERS");
+    expect(linked).toBeTruthy();
+    if (linked && linked.type === "CREATE_LINKED_ORDERS") {
+      expect(linked.segments).toHaveLength(2);
+      expect(linked.segments[0].origin).toBe("JUJA_HUB");
+      expect(linked.segments[1].origin).toBe("ELDORET_NURSERY");
+    }
   });
 
   it("cancels mid-flow", () => {

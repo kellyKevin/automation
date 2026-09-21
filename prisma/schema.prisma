@@ -85,6 +85,7 @@ model StaffUser {
   role      String // owner | packer | dispatcher | rider
   phone     String   @unique
   active    Boolean  @default(true)
+  passwordHash String?
   createdAt DateTime @default(now())
 }
 
@@ -195,6 +196,8 @@ model ConversationSession {
   phone        String   @unique // one live session per WhatsApp number
   step         String   @default("IDLE") // see ConversationStep in src/domain
   draft        String? // JSON blob of the in-progress order
+  handover     Boolean  @default(false) // true while a human is handling this chat
+  assignedTo   String?  // staff handling the handover
   lastActivity DateTime @default(now())
   createdAt    DateTime @default(now())
 

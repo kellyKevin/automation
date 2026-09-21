@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getStaff } from "@/lib/auth/staff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/orders?status=NEW — list orders for the admin panel.
+// GET /api/orders?status=NEW — list orders for the dashboard (staff only).
 export async function GET(req: NextRequest) {
+  if (!(await getStaff())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const status = req.nextUrl.searchParams.get("status") || undefined;
   const orders = await prisma.order.findMany({
     where: status ? { status } : undefined,
