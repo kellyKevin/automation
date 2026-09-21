@@ -14,6 +14,7 @@ import {
 } from "@/lib/orders/service";
 import { orderConfirmationMessages, teamAlertMessage } from "@/lib/orders/messages";
 import { availableStock } from "@/lib/orders/stock";
+import { initiateStkPush } from "@/lib/mpesa/service";
 import { ksh } from "@/lib/money";
 
 async function loadCatalog(): Promise<Catalog> {
@@ -131,6 +132,8 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
       case "CREATE_ORDER": {
         const created = await createOrderFromDraft(customer.id, effect.draft);
         const paybill = process.env.MPESA_PAYBILL || "000000";
+        // Fire an STK prompt automatically (no-op when M-Pesa isn't configured).
+        await initiateStkPush(created.orderId).catch(() => {});
         replies.push(
           ...orderConfirmationMessages(created.number, {
             paybill,
@@ -153,6 +156,8 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         const orders = await createLinkedOrders(customer.id, effect.segments, {
           ref: effect.ref,
         });
+        // Fire an STK prompt per order (no-op when M-Pesa isn't configured).
+        for (const o of orders) await initiateStkPush(o.orderId).catch(() => {});
         const paybill = process.env.MPESA_PAYBILL || "000000";
         const combined = orders.reduce((s, o) => s + o.total, 0);
         const refs = orders.map((o) => o.number).join(" and ");
