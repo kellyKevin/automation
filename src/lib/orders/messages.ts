@@ -29,6 +29,23 @@ export function orderConfirmationMessages(
   ];
 }
 
+/** Free-form reminder for an order that's still unpaid (Part 5). */
+export function paymentReminderMessage(
+  orderNumber: string,
+  amount: number,
+  paybill: string,
+): OutboundMessage {
+  return buttons(
+    `⏰ Reminder: order ${orderNumber} is awaiting payment of ${ksh(amount)}.\n` +
+      `Pay via M-Pesa Paybill ${paybill}, account ${orderNumber}, then reply with the confirmation.`,
+    [
+      { id: "pay_paid", title: "\u{1F4B3} I've paid" },
+      { id: "pay_cod", title: "\u{1F4B5} Pay on delivery" },
+      { id: "pay_help", title: "❓ Need help" },
+    ],
+  );
+}
+
 /** The message a customer gets when their order reaches a new status. */
 export function statusUpdateMessage(
   orderNumber: string,

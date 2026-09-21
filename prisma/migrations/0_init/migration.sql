@@ -80,6 +80,7 @@ CREATE TABLE "Order" (
     "total" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "notes" TEXT,
     "linkedOrderId" TEXT,
+    "remindedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

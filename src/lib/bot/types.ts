@@ -65,6 +65,16 @@ export interface CompletedSegment {
   delivery: DraftDelivery;
 }
 
+// Details gathered by the bot's bulk / institution enquiry flow (Part 3),
+// before it hands the conversation to a person to prepare a quote.
+export interface BulkData {
+  organisation?: string | null;
+  items?: string;
+  quantity?: string;
+  frequency?: string | null;
+  location?: string;
+}
+
 export interface OrderDraft {
   ref?: string;
   path?: "produce" | "seedling" | "mixed";
@@ -73,6 +83,8 @@ export interface OrderDraft {
   items: DraftItem[];
   delivery: DraftDelivery;
   bulk?: boolean;
+  /** Answers collected during the bulk / institution enquiry. */
+  bulkData?: BulkData;
   /** Consecutive unrecognised replies at the current step. */
   retries?: number;
   // --- Mixed-cart split (Part 2.4) ---

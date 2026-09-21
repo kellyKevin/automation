@@ -285,3 +285,24 @@ export async function markCashOnDelivery(orderId: string): Promise<void> {
     },
   });
 }
+
+/** Orders still awaiting payment that are due a reminder: unpaid, still open,
+ * created before the cutoff, and not yet reminded (Part 5). Includes the
+ * customer so the caller can honour the 24-hour window. */
+export async function ordersDueForPaymentReminder(olderThanMinutes: number) {
+  const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+  return prisma.order.findMany({
+    where: {
+      paymentStatus: "PENDING",
+      status: { in: ["NEW", "CONFIRMED"] },
+      createdAt: { lt: cutoff },
+      remindedAt: null,
+    },
+    include: { customer: true },
+  });
+}
+
+/** Record that a payment reminder was sent for an order. */
+export async function markOrderReminded(orderId: string): Promise<void> {
+  await prisma.order.update({ where: { id: orderId }, data: { remindedAt: new Date() } });
+}

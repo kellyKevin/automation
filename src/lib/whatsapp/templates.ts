@@ -24,6 +24,8 @@ export const DEFAULT_TEMPLATE_LANGUAGE = "en";
 
 export interface StatusTemplateContext {
   orderNumber: string;
+  /** Pre-formatted order total, e.g. "KSh 1,200" (used by order_received). */
+  total?: string;
   rider?: string;
   riderPhone?: string;
   carrier?: string;
@@ -47,6 +49,9 @@ export function templateForStatus(
   ctx: StatusTemplateContext,
 ): ResolvedTemplate | null {
   switch (status) {
+    case "CONFIRMED":
+      // Stock confirmed — an out-of-window acknowledgement of receipt.
+      return { name: "order_received", params: [ctx.orderNumber, ctx.total ?? "-"] };
     case "PAID":
       return { name: "payment_received", params: [ctx.orderNumber] };
     case "PACKED":
@@ -71,4 +76,31 @@ export function templateForStatus(
     default:
       return null;
   }
+}
+
+// --- Non-status template builders -------------------------------------------
+// These templates aren't driven by an order status change, so they have their
+// own trigger (a job or a staff action). Each keeps its body variables in the
+// same {{1}}, {{2}}, … order approved in the Meta dashboard.
+
+/** Reminder for an order that's still unpaid (payment-reminders job). */
+export function paymentReminderTemplate(
+  orderNumber: string,
+  total: string,
+  paybill: string,
+): ResolvedTemplate {
+  return { name: "payment_reminder", params: [orderNumber, total, paybill] };
+}
+
+/** A bulk/institution quote is ready (staff mark it QUOTED with an amount). */
+export function quoteReadyTemplate(name: string, amount: string): ResolvedTemplate {
+  return { name: "quote_ready", params: [name, amount] };
+}
+
+/** A standing order is confirmed (Phase 2 — contract customers). */
+export function standingOrderConfirmTemplate(
+  name: string,
+  schedule: string,
+): ResolvedTemplate {
+  return { name: "standing_order_confirm", params: [name, schedule] };
 }
