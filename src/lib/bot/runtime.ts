@@ -8,10 +8,12 @@ import { sendMessage } from "@/lib/whatsapp/client";
 import type { OutboundMessage } from "@/lib/whatsapp/messages";
 import {
   createOrderFromDraft,
+  createLinkedOrders,
   markCashOnDelivery,
   recordMpesaCode,
 } from "@/lib/orders/service";
 import { orderConfirmationMessages, teamAlertMessage } from "@/lib/orders/messages";
+import { ksh } from "@/lib/money";
 
 async function loadCatalog(): Promise<Catalog> {
   const [products, zones] = await Promise.all([
@@ -140,6 +142,43 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
             created.total,
             effect.draft.customerName ?? customer.name ?? undefined,
             effect.draft.items.length,
+          ),
+        );
+        break;
+      }
+
+      case "CREATE_LINKED_ORDERS": {
+        const orders = await createLinkedOrders(customer.id, effect.segments, {
+          ref: effect.ref,
+        });
+        const paybill = process.env.MPESA_PAYBILL || "000000";
+        const combined = orders.reduce((s, o) => s + o.total, 0);
+        const refs = orders.map((o) => o.number).join(" and ");
+        replies.push(
+          textMsg(`✅ Your cart ships from two places, so I've created ${orders.length} linked orders:`),
+        );
+        for (const o of orders) {
+          const label = o.origin === "ELDORET_NURSERY" ? "Seedlings" : "Fresh produce";
+          replies.push(textMsg(`• ${label}: ${o.number} — ${ksh(o.total)}`));
+        }
+        replies.push({
+          kind: "buttons",
+          body:
+            `To complete both orders, pay ${ksh(combined)} via M-Pesa:\n` +
+            `Paybill: ${paybill}\nUse reference ${refs}.\n\n` +
+            `Reply here with the M-Pesa confirmation once done.`,
+          buttons: [
+            { id: "pay_paid", title: "\u{1F4B3} I've paid" },
+            { id: "pay_cod", title: "\u{1F4B5} Pay on delivery" },
+            { id: "pay_help", title: "❓ Need help" },
+          ],
+        });
+        await alertTeam(
+          teamAlertMessage(
+            orders.map((o) => o.number).join(" + "),
+            combined,
+            effect.customerName ?? customer.name ?? undefined,
+            effect.segments.reduce((n, s) => n + s.items.length, 0),
           ),
         );
         break;

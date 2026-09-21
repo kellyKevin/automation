@@ -6,6 +6,7 @@ import { computeTotals } from "./pricing";
 import type {
   Catalog,
   CatalogProduct,
+  CompletedSegment,
   DraftItem,
   EngineInput,
   EngineResult,
@@ -107,15 +108,26 @@ function start(input: EngineInput): EngineResult {
   if (parsed.deliveryLocation) draft.delivery.address = parsed.deliveryLocation;
 
   if (draft.path === "mixed") {
+    // Split into two linked orders (Part 2.4): collect the produce first, then
+    // the seedlings, then create both. Reuses the normal single-segment flow.
+    const { produce, seedling } = splitBySegment(draft.items, input.catalog);
+    draft.mixed = true;
+    draft.items = produce;
+    draft.path = "produce";
+    draft.origin = "JUJA_HUB";
+    draft.pendingItems = seedling;
+    draft.pendingPath = "seedling";
     return {
-      step: "HANDOVER",
+      step: "CONFIRM_ITEMS",
       draft,
       replies: [
         text(
-          "Your cart mixes fresh produce and seedlings, which ship from different places (Juja & Eldoret). Our team will split this into two orders and get back to you shortly.",
+          "Your cart has fresh produce and seedlings — they ship from different places, so I'll set up two linked orders. Let's start with the fresh produce:",
         ),
+        text(itemsSummaryText(draft)),
+        confirmItemsButtons(),
       ],
-      effects: [{ type: "HANDOVER", reason: "mixed cart" }],
+      effects: [],
     };
   }
 
@@ -498,6 +510,61 @@ function summaryStep(input: EngineInput, draft: OrderDraft): EngineResult {
     };
   }
   if (input.replyId === "sum_confirm") {
+    // Mixed cart: another segment still to collect -> finish this one, move on.
+    if (draft.pendingItems && draft.pendingItems.length > 0) {
+      const seg: CompletedSegment = {
+        path: draft.path === "seedling" ? "seedling" : "produce",
+        origin: draft.origin ?? "JUJA_HUB",
+        items: draft.items,
+        delivery: draft.delivery,
+      };
+      const next = clone(draft);
+      next.completedSegments = [...(draft.completedSegments ?? []), seg];
+      next.items = draft.pendingItems;
+      next.path = draft.pendingPath ?? "seedling";
+      next.origin = next.path === "seedling" ? "ELDORET_NURSERY" : "JUJA_HUB";
+      next.delivery = {};
+      next.pendingItems = undefined;
+      next.pendingPath = undefined;
+      next.retries = 0;
+      const label =
+        next.path === "seedling" ? "seedlings (shipped from Eldoret)" : "fresh produce";
+      return {
+        step: "CONFIRM_ITEMS",
+        draft: next,
+        replies: [
+          text(`✅ First order set. Now your ${label}:`),
+          text(itemsSummaryText(next)),
+          confirmItemsButtons(),
+        ],
+        effects: [],
+      };
+    }
+
+    // Mixed cart, final segment -> create both linked orders.
+    if (draft.completedSegments && draft.completedSegments.length > 0) {
+      const seg: CompletedSegment = {
+        path: draft.path === "seedling" ? "seedling" : "produce",
+        origin: draft.origin ?? "ELDORET_NURSERY",
+        items: draft.items,
+        delivery: draft.delivery,
+      };
+      return {
+        step: "AWAIT_PAYMENT",
+        draft: { ...draft, retries: 0 },
+        replies: [],
+        effects: [
+          {
+            type: "CREATE_LINKED_ORDERS",
+            segments: [...draft.completedSegments, seg],
+            ref: draft.ref,
+            customerName: draft.customerName,
+          },
+        ],
+      };
+    }
+
+    // Single order.
     return {
       step: "AWAIT_PAYMENT",
       draft: { ...draft, retries: 0 },
@@ -605,6 +672,29 @@ export function detectPath(items: DraftItem[], catalog: Catalog): "produce" | "s
   }
   if (categories.has("seedling") && categories.has("produce")) return "mixed";
   return categories.has("seedling") ? "seedling" : "produce";
+}
+
+function confirmItemsButtons(): OutboundMessage {
+  return buttons("Is this correct?", [
+    { id: "items_yes", title: "✅ Yes, continue" },
+    { id: "items_change", title: "✏️ Change items" },
+    { id: "items_cancel", title: "❌ Cancel" },
+  ]);
+}
+
+/** Split a mixed cart's items into produce vs seedling segments. */
+function splitBySegment(
+  items: DraftItem[],
+  catalog: Catalog,
+): { produce: DraftItem[]; seedling: DraftItem[] } {
+  const produce: DraftItem[] = [];
+  const seedling: DraftItem[] = [];
+  for (const it of items) {
+    const p = catalog.products.find((x) => x.slug === it.slug);
+    const isSeedling = p ? p.category === "seedling" : it.unit === "seedling";
+    (isSeedling ? seedling : produce).push(it);
+  }
+  return { produce, seedling };
 }
 
 function itemsSummaryText(draft: OrderDraft): string {
