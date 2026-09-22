@@ -79,6 +79,7 @@ model Customer {
   sessions     ConversationSession[]
   messages     MessageLog[]
   bulkQuotes   BulkQuote[]
+  contract     ContractCustomer?
 }
 
 model StaffUser {
@@ -273,4 +274,121 @@ model OutboundQueue {
   createdAt  DateTime @default(now())
 
   @@index([status])
+}
+
+// --- Phase 2: contract customers & standing orders -------------------------
+
+// A customer on contract terms (institutions, hotels, resellers). Extends a
+// Customer with billing/terms; standing orders hang off it.
+model ContractCustomer {
+  id           String   @id @default(cuid())
+  customerId   String   @unique
+  organisation String?
+  contactPerson String?
+  billingEmail String?
+  paymentTerms String? // e.g. "NET_30", "PREPAID"
+  active       Boolean  @default(true)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  standingOrders StandingOrder[]
+  prices         ContractPrice[]
+  invoices       Invoice[]
+}
+
+// A recurring order that is generated automatically on its schedule.
+model StandingOrder {
+  id            String    @id @default(cuid())
+  contractId    String
+  label         String? // e.g. "Weekly veg for kitchen"
+  frequency     String // DAILY | WEEKLY | BIWEEKLY | MONTHLY
+  origin        String    @default("JUJA_HUB")
+  method        String    @default("LOCAL_RIDER")
+  zoneId        String?
+  address       String?
+  county        String?
+  town          String?
+  receiverName  String?
+  receiverPhone String?
+  deliveryFee   Float     @default(0)
+  active        Boolean   @default(true)
+  nextRunAt     DateTime // when the next order should be generated
+  lastRunAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  contract ContractCustomer   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  items    StandingOrderItem[]
+
+  @@index([active, nextRunAt])
+}
+
+model StandingOrderItem {
+  id              String  @id @default(cuid())
+  standingOrderId String
+  productId       String?
+  slug            String?
+  productName     String
+  quantity        Float
+  unit            String
+  unitPrice       Float
+
+  standingOrder StandingOrder @relation(fields: [standingOrderId], references: [id], onDelete: Cascade)
+}
+
+// --- Phase 2: price lists & invoices ---------------------------------------
+
+// A contract's agreed price for a product. Overrides the catalogue price for
+// that contract's orders (standing orders and, later, bot orders).
+model ContractPrice {
+  id          String   @id @default(cuid())
+  contractId  String
+  slug        String?
+  productName String
+  unitPrice   Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contract ContractCustomer @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, productName])
+}
+
+// A periodic invoice for a contract customer.
+model Invoice {
+  id          String    @id @default(cuid())
+  number      String    @unique // INV-0001
+  contractId  String
+  customerId  String
+  periodStart DateTime
+  periodEnd   DateTime
+  status      String    @default("DRAFT") // DRAFT | SENT | PAID | VOID
+  subtotal    Float     @default(0)
+  total       Float     @default(0)
+  notes       String?
+  sentAt      DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  contract ContractCustomer @relation(fields: [contractId], references: [id])
+  lines    InvoiceLine[]
+
+  @@index([contractId])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  orderId     String?
+  orderNumber String?
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float
+  lineTotal   Float
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }

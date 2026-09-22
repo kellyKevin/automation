@@ -27,8 +27,13 @@ export default async function RootLayout({
               <nav style={{ display: "flex", gap: 16, marginTop: 8, alignItems: "center" }}>
                 <Link className="navlink" href="/admin">Orders</Link>
                 <Link className="navlink" href="/inbox">Inbox</Link>
+                <Link className="navlink" href="/customers">Customers</Link>
                 <Link className="navlink" href="/products">Products</Link>
+                <Link className="navlink" href="/dispatch">Dispatch</Link>
                 <Link className="navlink" href="/quotes">Quotes</Link>
+                <Link className="navlink" href="/contracts">Contracts</Link>
+                <Link className="navlink" href="/invoices">Invoices</Link>
+                <Link className="navlink" href="/reports">Reports</Link>
                 <Link className="navlink" href="/connect">Connect</Link>
                 <span style={{ marginLeft: "auto", opacity: 0.9 }}>{staff.name}</span>
                 <LogoutButton />

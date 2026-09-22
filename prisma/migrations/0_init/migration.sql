@@ -315,3 +315,108 @@ ALTER TABLE "MessageLog" ADD CONSTRAINT "MessageLog_customerId_fkey" FOREIGN KEY
 -- AddForeignKey
 ALTER TABLE "BulkQuote" ADD CONSTRAINT "BulkQuote_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
+
+-- Phase 2: contract customers & standing orders
+CREATE TABLE "ContractCustomer" (
+    "id" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "organisation" TEXT,
+    "contactPerson" TEXT,
+    "billingEmail" TEXT,
+    "paymentTerms" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "ContractCustomer_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "ContractCustomer_customerId_key" ON "ContractCustomer"("customerId");
+
+CREATE TABLE "StandingOrder" (
+    "id" TEXT NOT NULL,
+    "contractId" TEXT NOT NULL,
+    "label" TEXT,
+    "frequency" TEXT NOT NULL,
+    "origin" TEXT NOT NULL DEFAULT 'JUJA_HUB',
+    "method" TEXT NOT NULL DEFAULT 'LOCAL_RIDER',
+    "zoneId" TEXT,
+    "address" TEXT,
+    "county" TEXT,
+    "town" TEXT,
+    "receiverName" TEXT,
+    "receiverPhone" TEXT,
+    "deliveryFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "nextRunAt" TIMESTAMP(3) NOT NULL,
+    "lastRunAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "StandingOrder_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX "StandingOrder_active_nextRunAt_idx" ON "StandingOrder"("active", "nextRunAt");
+
+CREATE TABLE "StandingOrderItem" (
+    "id" TEXT NOT NULL,
+    "standingOrderId" TEXT NOT NULL,
+    "productId" TEXT,
+    "slug" TEXT,
+    "productName" TEXT NOT NULL,
+    "quantity" DOUBLE PRECISION NOT NULL,
+    "unit" TEXT NOT NULL,
+    "unitPrice" DOUBLE PRECISION NOT NULL,
+    CONSTRAINT "StandingOrderItem_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "ContractCustomer" ADD CONSTRAINT "ContractCustomer_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "StandingOrder" ADD CONSTRAINT "StandingOrder_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "ContractCustomer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "StandingOrderItem" ADD CONSTRAINT "StandingOrderItem_standingOrderId_fkey" FOREIGN KEY ("standingOrderId") REFERENCES "StandingOrder"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Phase 2: price lists & invoices
+CREATE TABLE "ContractPrice" (
+    "id" TEXT NOT NULL,
+    "contractId" TEXT NOT NULL,
+    "slug" TEXT,
+    "productName" TEXT NOT NULL,
+    "unitPrice" DOUBLE PRECISION NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "ContractPrice_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "ContractPrice_contractId_productName_key" ON "ContractPrice"("contractId", "productName");
+
+CREATE TABLE "Invoice" (
+    "id" TEXT NOT NULL,
+    "number" TEXT NOT NULL,
+    "contractId" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "periodStart" TIMESTAMP(3) NOT NULL,
+    "periodEnd" TIMESTAMP(3) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "subtotal" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "total" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "notes" TEXT,
+    "sentAt" TIMESTAMP(3),
+    "paidAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "Invoice_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "Invoice_number_key" ON "Invoice"("number");
+CREATE INDEX "Invoice_contractId_idx" ON "Invoice"("contractId");
+CREATE INDEX "Invoice_status_idx" ON "Invoice"("status");
+
+CREATE TABLE "InvoiceLine" (
+    "id" TEXT NOT NULL,
+    "invoiceId" TEXT NOT NULL,
+    "orderId" TEXT,
+    "orderNumber" TEXT,
+    "description" TEXT NOT NULL,
+    "quantity" DOUBLE PRECISION NOT NULL DEFAULT 1,
+    "unitPrice" DOUBLE PRECISION NOT NULL,
+    "lineTotal" DOUBLE PRECISION NOT NULL,
+    CONSTRAINT "InvoiceLine_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "ContractPrice" ADD CONSTRAINT "ContractPrice_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "ContractCustomer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_contractId_fkey" FOREIGN KEY ("contractId") REFERENCES "ContractCustomer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "InvoiceLine" ADD CONSTRAINT "InvoiceLine_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "Invoice"("id") ON DELETE CASCADE ON UPDATE CASCADE;
