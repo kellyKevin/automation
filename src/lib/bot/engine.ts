@@ -582,11 +582,12 @@ function summaryStep(input: EngineInput, draft: OrderDraft): EngineResult {
 }
 
 function awaitPayment(input: EngineInput, draft: OrderDraft): EngineResult {
+  const lang = draft.lang ?? "en";
   if (input.replyId === "pay_cod") {
     return {
       step: "DONE",
       draft,
-      replies: [text("Noted — pay on delivery. We're preparing your order. \u{1F69C}")],
+      replies: [text(t("cod_noted", lang))],
       effects: [{ type: "MARK_CASH_ON_DELIVERY" }],
     };
   }
@@ -594,22 +595,17 @@ function awaitPayment(input: EngineInput, draft: OrderDraft): EngineResult {
     return {
       step: "HANDOVER",
       draft,
-      replies: [text("No problem — let me connect you with our team.")],
+      replies: [text(t("pay_help_connect", lang))],
       effects: [{ type: "HANDOVER", reason: "payment help requested" }],
     };
   }
-  const lang = draft.lang ?? "en";
   const code = extractMpesaCode(input.text ?? "");
   if (input.replyId === "pay_paid" || code) {
     return {
       step: "DONE",
       draft,
       replies: [
-        text(
-          code
-            ? `Thank you! We've received code ${code} and will confirm your payment shortly.`
-            : t("thanks_payment", lang),
-        ),
+        text(code ? t("thanks_code", lang, { code }) : t("thanks_payment", lang)),
       ],
       effects: code ? [{ type: "RECORD_MPESA_CODE", code }] : [],
     };

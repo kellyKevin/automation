@@ -116,6 +116,40 @@ const CATALOG: Record<string, Entry> = {
     en: "Thank you! We'll confirm your payment shortly.",
     sw: "Asante! Tutathibitisha malipo yako hivi punde.",
   },
+  // --- Order confirmation & payment (composed after an order is created) ---
+  oc_received: {
+    en: "✅ Order {number} received. We'll confirm stock shortly.",
+    sw: "✅ Oda {number} imepokelewa. Tutathibitisha stoku hivi punde.",
+  },
+  oc_pay: {
+    en: "To complete your order, pay {amount} via M-Pesa:\nPaybill: {paybill}\nAccount: {account}\n\nReply here with the M-Pesa confirmation message once done.",
+    sw: "Kukamilisha oda yako, lipa {amount} kupitia M-Pesa:\nPaybill: {paybill}\nAkaunti: {account}\n\nJibu hapa na ujumbe wa uthibitisho wa M-Pesa ukimaliza.",
+  },
+  btn_paid: { en: "\u{1F4B3} I've paid", sw: "\u{1F4B3} Nimelipa" },
+  btn_cod: { en: "\u{1F4B5} Pay on delivery", sw: "\u{1F4B5} Lipa nikipokea" },
+  btn_help: { en: "❓ Need help", sw: "❓ Nahitaji msaada" },
+  cod_noted: {
+    en: "Noted — pay on delivery. We're preparing your order. \u{1F69C}",
+    sw: "Sawa — utalipa unapopokea. Tunaandaa oda yako. \u{1F69C}",
+  },
+  pay_help_connect: {
+    en: "No problem — let me connect you with our team.",
+    sw: "Hakuna shida — nitakuunganisha na timu yetu.",
+  },
+  thanks_code: {
+    en: "Thank you! We've received code {code} and will confirm your payment shortly.",
+    sw: "Asante! Tumepokea msimbo {code} na tutathibitisha malipo yako hivi punde.",
+  },
+  linked_intro: {
+    en: "✅ Your cart ships from two places, so I've created {n} linked orders:",
+    sw: "✅ Bidhaa zako zinatoka sehemu mbili, kwa hivyo nimeunda oda {n} zilizounganishwa:",
+  },
+  linked_pay: {
+    en: "To complete both orders, pay {amount} via M-Pesa:\nPaybill: {paybill}\nUse reference {refs}.\n\nReply here with the M-Pesa confirmation once done.",
+    sw: "Kukamilisha oda zote mbili, lipa {amount} kupitia M-Pesa:\nPaybill: {paybill}\nTumia rejeleo {refs}.\n\nJibu hapa na uthibitisho wa M-Pesa ukimaliza.",
+  },
+  linked_line_produce: { en: "Fresh produce", sw: "Mazao mabichi" },
+  linked_line_seedlings: { en: "Seedlings", sw: "Miche" },
 };
 
 /** Translate a catalogue key into the given language, filling {vars}. */
