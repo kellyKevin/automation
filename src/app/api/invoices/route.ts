@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getStaff } from "@/lib/auth/staff";
 import { generateInvoiceForContract } from "@/lib/contracts/invoices";
+import { eatStartOfDay, eatEndOfDay } from "@/lib/contracts/eat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +31,9 @@ export async function POST(req: NextRequest) {
   }
   const b = await req.json().catch(() => ({}));
   const contractId = typeof b?.contractId === "string" ? b.contractId : "";
-  const start = new Date(b?.periodStart);
-  const end = new Date(b?.periodEnd);
+  // Interpret the picked dates in EAT so the period covers whole local days.
+  const start = typeof b?.periodStart === "string" ? eatStartOfDay(b.periodStart) : new Date(NaN);
+  const end = typeof b?.periodEnd === "string" ? eatEndOfDay(b.periodEnd) : new Date(NaN);
   if (!contractId || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     return NextResponse.json({ error: "contractId, periodStart and periodEnd are required" }, { status: 400 });
   }

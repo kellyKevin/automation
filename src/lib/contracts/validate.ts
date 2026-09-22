@@ -2,6 +2,7 @@
 // route turns the returned value into a Prisma create.
 
 import { isFrequency, type Frequency } from "./schedule";
+import { eatStartOfDay } from "./eat";
 
 export interface StandingOrderItemInput {
   slug: string | null;
@@ -61,8 +62,10 @@ export function parseStandingOrder(input: unknown): StandingOrderParse {
   }
   if (items.length === 0) return { ok: false, error: "Add at least one item" };
 
+  // A bare date from the picker means "start of that day in EAT", so a first
+  // run of today is immediately due rather than 3 hours in the future (UTC).
   const startRaw = str(b.nextRunAt) ?? str(b.startAt);
-  const nextRunAt = startRaw ? new Date(startRaw) : new Date();
+  const nextRunAt = startRaw ? eatStartOfDay(startRaw) : new Date();
   if (Number.isNaN(nextRunAt.getTime())) return { ok: false, error: "Invalid start date" };
 
   const fee = num(b.deliveryFee);
