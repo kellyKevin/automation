@@ -15,6 +15,15 @@ import type {
 } from "./types";
 import { emptyDraft } from "./types";
 import type { ConversationStep } from "@/domain";
+import {
+  detectLanguage,
+  isStopWord,
+  isCancelWord,
+  isChangeWord,
+  isYesWord,
+  t,
+  type Lang,
+} from "./i18n";
 
 const MAX_RETRIES = 1; // ask again once, then hand to a human
 
@@ -25,24 +34,22 @@ export function handleTurn(input: EngineInput): EngineResult {
   const said = (input.text ?? "").trim();
   const lower = said.toLowerCase();
 
-  // Global commands work from any step.
-  if (isStop(lower)) {
-    return done("HANDOVER", draft, [
-      text(
-        "You're unsubscribed from non-order messages. Send a new order any time to start again.",
-      ),
-    ], [{ type: "OPT_OUT" }]);
+  // Detect the customer's language (sticky to Swahili once seen) and remember it.
+  const lang = detectLanguage(said, draft.lang ?? "en");
+  draft.lang = lang;
+
+  // Global commands work from any step, in English or Swahili.
+  if (isStopWord(lower)) {
+    return done("HANDOVER", draft, [text(t("opted_out", lang))], [{ type: "OPT_OUT" }]);
   }
-  if (isCancel(lower) && input.step !== "IDLE" && input.step !== "DONE") {
-    return done("IDLE", emptyDraft(), [
-      text("No problem — I've cancelled that. Send a new order whenever you're ready. \u{1F331}"),
-    ]);
+  if (isCancelWord(lower) && input.step !== "IDLE" && input.step !== "DONE") {
+    return done("IDLE", { ...emptyDraft(), lang }, [text(t("cancelled", lang))]);
   }
 
   switch (input.step) {
     case "IDLE":
     case "DONE":
-      return start(input);
+      return start(input, lang);
     case "CONFIRM_ITEMS":
       return confirmItems(input, draft);
     case "ASK_NAME":
@@ -78,26 +85,21 @@ export function handleTurn(input: EngineInput): EngineResult {
     case "BULK_LOCATION":
       return bulkLocation(input, draft);
     default:
-      return start(input);
+      return start(input, lang);
   }
 }
 
 // --- Step: start ------------------------------------------------------------
 
-function start(input: EngineInput): EngineResult {
+function start(input: EngineInput, lang: Lang): EngineResult {
   // Enquiry-menu buttons (shown below when the message isn't an order).
-  if (input.replyId === "menu_bulk") return startBulk();
+  if (input.replyId === "menu_bulk") return startBulk(lang);
   if (input.replyId === "menu_produce" || input.replyId === "menu_seedlings") {
-    const what = input.replyId === "menu_seedlings" ? "seedlings" : "fresh produce";
+    const what = input.replyId === "menu_seedlings" ? t("what_seedlings", lang) : t("what_produce", lang);
     return {
       step: "IDLE",
-      draft: emptyDraft(),
-      replies: [
-        text(
-          `Great! Send me your ${what} list, one item per line, e.g.\n` +
-            "• Tomatoes x 5 kg\n• Onions x 2 kg\n\nI'll price it and set up your order.",
-        ),
-      ],
+      draft: { ...emptyDraft(), lang },
+      replies: [text(t("send_list", lang, { what }))],
       effects: [],
     };
   }
@@ -107,22 +109,20 @@ function start(input: EngineInput): EngineResult {
     // Not an order — offer the enquiry menu, stay idle.
     return {
       step: "IDLE",
-      draft: emptyDraft(),
+      draft: { ...emptyDraft(), lang },
       replies: [
-        buttons(
-          "\u{1F44B} Welcome to Farm City! What can I help you with?",
-          [
-            { id: "menu_produce", title: "Fresh produce" },
-            { id: "menu_seedlings", title: "Seedlings" },
-            { id: "menu_bulk", title: "Bulk / institution" },
-          ],
-        ),
+        buttons(t("welcome", lang), [
+          { id: "menu_produce", title: t("menu_produce", lang) },
+          { id: "menu_seedlings", title: t("menu_seedlings", lang) },
+          { id: "menu_bulk", title: t("menu_bulk", lang) },
+        ]),
       ],
       effects: [],
     };
   }
 
   const draft = emptyDraft();
+  draft.lang = lang;
   draft.ref = parsed.ref;
   draft.items = resolveItems(parsed.items, input.catalog);
   draft.path = detectPath(draft.items, input.catalog);
@@ -150,30 +150,25 @@ function start(input: EngineInput): EngineResult {
           "Your cart has fresh produce and seedlings — they ship from different places, so I'll set up two linked orders. Let's start with the fresh produce:",
         ),
         text(itemsSummaryText(draft)),
-        confirmItemsButtons(),
+        confirmItemsButtons(lang),
       ],
       effects: [],
     };
   }
 
-  const replies: OutboundMessage[] = [text(itemsSummaryText(draft))];
-  replies.push(
-    buttons("Is this correct?", [
-      { id: "items_yes", title: "✅ Yes, continue" },
-      { id: "items_change", title: "✏️ Change items" },
-      { id: "items_cancel", title: "❌ Cancel" },
-    ]),
-  );
+  const replies: OutboundMessage[] = [text(itemsSummaryText(draft)), confirmItemsButtons(lang)];
   return { step: "CONFIRM_ITEMS", draft, replies, effects: [] };
 }
 
 // --- Step: confirm items ----------------------------------------------------
 
 function confirmItems(input: EngineInput, draft: OrderDraft): EngineResult {
+  const lang = draft.lang ?? "en";
+  const lower = (input.text ?? "").trim().toLowerCase();
   if (input.replyId === "items_cancel") {
-    return cancelled();
+    return cancelled(lang);
   }
-  if (input.replyId === "items_change" || wantsChange(input.text)) {
+  if (input.replyId === "items_change" || isChangeWord(lower)) {
     return {
       step: "CONFIRM_ITEMS",
       draft: { ...draft, retries: 0 },
@@ -198,20 +193,13 @@ function confirmItems(input: EngineInput, draft: OrderDraft): EngineResult {
       return {
         step: "CONFIRM_ITEMS",
         draft: next,
-        replies: [
-          text(itemsSummaryText(next)),
-          buttons("Is this correct?", [
-            { id: "items_yes", title: "✅ Yes, continue" },
-            { id: "items_change", title: "✏️ Change items" },
-            { id: "items_cancel", title: "❌ Cancel" },
-          ]),
-        ],
+        replies: [text(itemsSummaryText(next)), confirmItemsButtons(lang)],
         effects: [],
       };
     }
   }
 
-  if (input.replyId === "items_yes") {
+  if (input.replyId === "items_yes" || isYesWord(lower)) {
     // Drop unavailable items now.
     const available = draft.items.filter((i) => i.available);
     if (available.length === 0) {
@@ -227,31 +215,28 @@ function confirmItems(input: EngineInput, draft: OrderDraft): EngineResult {
     return routeAfterItems(input, next);
   }
 
-  return retryOrHandover(draft, "CONFIRM_ITEMS", "unrecognised at confirm", [
-    buttons("Please choose one:", [
-      { id: "items_yes", title: "✅ Yes, continue" },
-      { id: "items_change", title: "✏️ Change items" },
-      { id: "items_cancel", title: "❌ Cancel" },
-    ]),
-  ]);
+  return retryOrHandover(draft, "CONFIRM_ITEMS", "unrecognised at confirm", [confirmItemsButtons(lang)]);
 }
 
 function routeAfterItems(input: EngineInput, draft: OrderDraft): EngineResult {
   // We may already know the name: a returning customer, or one the storefront
   // message stated ("Name: kelly"). Only ask when we have neither.
+  const lang = draft.lang ?? "en";
   const returningName = input.customer.isReturning ? input.customer.name : null;
   const knownName = returningName ?? draft.customerName ?? null;
   if (!knownName) {
     return {
       step: "ASK_NAME",
       draft,
-      replies: [text("May I have your name for the order?")],
+      replies: [text(t("ask_name", lang))],
       effects: [],
     };
   }
   const next = clone(draft);
   next.customerName = knownName;
-  const greeting = returningName ? `Welcome back, ${knownName}! ` : `Thanks, ${knownName}! `;
+  const greeting = returningName
+    ? t("greeting_back", lang, { name: knownName })
+    : t("greeting_new", lang, { name: knownName });
   const res = beginDeliveryPath(input, next, greeting);
   // Persist a name that came from the message but isn't on the customer record.
   if (!input.customer.name && draft.customerName) {
@@ -264,15 +249,14 @@ function routeAfterItems(input: EngineInput, draft: OrderDraft): EngineResult {
 
 function askName(input: EngineInput, draft: OrderDraft): EngineResult {
   const name = cleanName(input.text ?? "");
+  const lang = draft.lang ?? "en";
   if (!name) {
-    return retryOrHandover(draft, "ASK_NAME", "no name given", [
-      text("Sorry, I didn't catch that. What name should we put on the order?"),
-    ]);
+    return retryOrHandover(draft, "ASK_NAME", "no name given", [text(t("ask_name_again", lang))]);
   }
   const next = clone(draft);
   next.customerName = name;
   next.retries = 0;
-  const res = beginDeliveryPath(input, next, `Thanks, ${name}! `);
+  const res = beginDeliveryPath(input, next, t("greeting_new", lang, { name }));
   return { ...res, effects: [{ type: "SAVE_CUSTOMER_NAME", name }, ...res.effects] };
 }
 
@@ -281,11 +265,12 @@ function beginDeliveryPath(
   draft: OrderDraft,
   prefix: string,
 ): EngineResult {
+  const lang = draft.lang ?? "en";
   if (draft.path === "seedling") {
     return {
       step: "SEEDLING_COUNTY",
       draft,
-      replies: [text(`${prefix}Which county are we sending the seedlings to?`)],
+      replies: [text(t("ask_county", lang, { prefix }))],
       effects: [],
     };
   }
@@ -302,11 +287,11 @@ function beginDeliveryPath(
   const rows = zones
     .slice(0, 9)
     .map((z) => ({ id: `zone_${z.id}`, title: z.name, description: `Delivery ${ksh(z.fee)}` }));
-  rows.push({ id: "zone_other", title: "Other area", description: "We'll confirm with you" });
+  rows.push({ id: "zone_other", title: t("other_area", lang), description: "We'll confirm with you" });
   return {
     step: "PRODUCE_ZONE",
     draft,
-    replies: [list(`${prefix}Where should we deliver?`, "Choose area", rows)],
+    replies: [list(t("ask_where_deliver", lang, { prefix }), t("choose_area", lang), rows)],
     effects: [],
   };
 }
@@ -335,9 +320,7 @@ function produceZone(input: EngineInput, draft: OrderDraft): EngineResult {
   return {
     step: "PRODUCE_LOCATION",
     draft: next,
-    replies: [
-      text("Please share your location pin, or type your estate and a nearby landmark."),
-    ],
+    replies: [text(t("ask_location", draft.lang ?? "en"))],
     effects: [],
   };
 }
@@ -352,22 +335,18 @@ function produceLocation(input: EngineInput, draft: OrderDraft): EngineResult {
   const next = clone(draft);
   next.delivery = { ...next.delivery, address: loc };
   next.retries = 0;
+  const lang = draft.lang ?? "en";
   const afterCutoff = isAfterCutoff(input, next.delivery.zoneId);
+  const tomorrow = { id: "day_tomorrow", title: t("day_tomorrow", lang) };
+  const pick = { id: "day_pick", title: t("day_pick", lang) };
   const dayButtons = afterCutoff
-    ? [
-        { id: "day_tomorrow", title: "Tomorrow" },
-        { id: "day_pick", title: "Pick a date" },
-      ]
-    : [
-        { id: "day_today", title: "Today" },
-        { id: "day_tomorrow", title: "Tomorrow" },
-        { id: "day_pick", title: "Pick a date" },
-      ];
+    ? [tomorrow, pick]
+    : [{ id: "day_today", title: t("day_today", lang) }, tomorrow, pick];
   const note = afterCutoff ? "Orders after the daily cutoff are delivered the next day.\n" : "";
   return {
     step: "PRODUCE_DAY",
     draft: next,
-    replies: [buttons(`${note}When would you like delivery?`, dayButtons)],
+    replies: [buttons(`${note}${t("ask_day", lang)}`, dayButtons)],
     effects: [],
   };
 }
@@ -390,7 +369,7 @@ function produceDay(input: EngineInput, draft: OrderDraft): EngineResult {
   return {
     step: "PRODUCE_RECEIVER",
     draft: next,
-    replies: [text("Who will receive the order, and on which phone number?\n(e.g. Grace, 0712345678)")],
+    replies: [text(t("ask_receiver", draft.lang ?? "en"))],
     effects: [],
   };
 }
@@ -420,7 +399,7 @@ function seedlingCounty(input: EngineInput, draft: OrderDraft): EngineResult {
   const next = clone(draft);
   next.delivery.county = county;
   next.retries = 0;
-  return { step: "SEEDLING_TOWN", draft: next, replies: [text("Which town or area?")], effects: [] };
+  return { step: "SEEDLING_TOWN", draft: next, replies: [text(t("ask_town", draft.lang ?? "en"))], effects: [] };
 }
 
 function seedlingTown(input: EngineInput, draft: OrderDraft): EngineResult {
@@ -435,10 +414,10 @@ function seedlingTown(input: EngineInput, draft: OrderDraft): EngineResult {
     step: "SEEDLING_METHOD",
     draft: next,
     replies: [
-      buttons("How would you like to receive them?", [
-        { id: "method_door", title: "Door delivery" },
-        { id: "method_office", title: "Courier/bus office" },
-        { id: "method_pickup", title: "Pick up at nursery" },
+      buttons(t("ask_method", draft.lang ?? "en"), [
+        { id: "method_door", title: t("method_door", draft.lang ?? "en") },
+        { id: "method_office", title: t("method_office", draft.lang ?? "en") },
+        { id: "method_pickup", title: t("method_pickup", draft.lang ?? "en") },
       ]),
     ],
     effects: [],
@@ -463,7 +442,7 @@ function seedlingMethod(input: EngineInput, draft: OrderDraft): EngineResult {
   return {
     step: "SEEDLING_RECEIVER",
     draft: next,
-    replies: [text("Receiver's name and phone number, please.\n(e.g. Grace, 0712345678)")],
+    replies: [text(t("ask_receiver", draft.lang ?? "en"))],
     effects: [],
   };
 }
@@ -501,24 +480,26 @@ function seedlingDate(input: EngineInput, draft: OrderDraft): EngineResult {
 
 // --- Summary + payment ------------------------------------------------------
 
+function summaryButtons(lang: Lang): OutboundMessage {
+  return buttons(t("go_ahead", lang), [
+    { id: "sum_confirm", title: t("btn_confirm_order", lang) },
+    { id: "sum_edit", title: t("btn_edit", lang) },
+    { id: "sum_cancel", title: t("btn_cancel", lang) },
+  ]);
+}
+
 function toSummary(draft: OrderDraft): EngineResult {
   return {
     step: "SUMMARY",
     draft,
-    replies: [
-      text(summaryText(draft)),
-      buttons("Shall we go ahead?", [
-        { id: "sum_confirm", title: "✅ Confirm order" },
-        { id: "sum_edit", title: "✏️ Edit" },
-        { id: "sum_cancel", title: "❌ Cancel" },
-      ]),
-    ],
+    replies: [text(summaryText(draft)), summaryButtons(draft.lang ?? "en")],
     effects: [],
   };
 }
 
 function summaryStep(input: EngineInput, draft: OrderDraft): EngineResult {
-  if (input.replyId === "sum_cancel") return cancelled();
+  const lang = draft.lang ?? "en";
+  if (input.replyId === "sum_cancel") return cancelled(lang);
   if (input.replyId === "sum_edit") {
     return {
       step: "CONFIRM_ITEMS",
@@ -560,7 +541,7 @@ function summaryStep(input: EngineInput, draft: OrderDraft): EngineResult {
         replies: [
           text(`✅ First order set. Now your ${label}:`),
           text(itemsSummaryText(next)),
-          confirmItemsButtons(),
+          confirmItemsButtons(lang),
         ],
         effects: [],
       };
@@ -597,13 +578,7 @@ function summaryStep(input: EngineInput, draft: OrderDraft): EngineResult {
       effects: [{ type: "CREATE_ORDER", draft }],
     };
   }
-  return retryOrHandover(draft, "SUMMARY", "no summary choice", [
-    buttons("Please choose:", [
-      { id: "sum_confirm", title: "✅ Confirm order" },
-      { id: "sum_edit", title: "✏️ Edit" },
-      { id: "sum_cancel", title: "❌ Cancel" },
-    ]),
-  ]);
+  return retryOrHandover(draft, "SUMMARY", "no summary choice", [summaryButtons(lang)]);
 }
 
 function awaitPayment(input: EngineInput, draft: OrderDraft): EngineResult {
@@ -623,6 +598,7 @@ function awaitPayment(input: EngineInput, draft: OrderDraft): EngineResult {
       effects: [{ type: "HANDOVER", reason: "payment help requested" }],
     };
   }
+  const lang = draft.lang ?? "en";
   const code = extractMpesaCode(input.text ?? "");
   if (input.replyId === "pay_paid" || code) {
     return {
@@ -632,25 +608,23 @@ function awaitPayment(input: EngineInput, draft: OrderDraft): EngineResult {
         text(
           code
             ? `Thank you! We've received code ${code} and will confirm your payment shortly.`
-            : "Thank you! We'll confirm your payment shortly.",
+            : t("thanks_payment", lang),
         ),
       ],
       effects: code ? [{ type: "RECORD_MPESA_CODE", code }] : [],
     };
   }
-  return retryOrHandover(draft, "AWAIT_PAYMENT", "no payment signal", [
-    text("Once you've paid, reply with the M-Pesa confirmation message, or tap an option above."),
-  ]);
+  return retryOrHandover(draft, "AWAIT_PAYMENT", "no payment signal", [text(t("pay_prompt", lang))]);
 }
 
 // --- Bulk / institution enquiry (Part 3) ------------------------------------
 // The bot gathers the same basics as the website quote form, then hands the
 // conversation to a person who prepares and sends the quote.
 
-function startBulk(): EngineResult {
+function startBulk(lang: Lang): EngineResult {
   return {
     step: "BULK_ORG",
-    draft: { ...emptyDraft(), bulk: true, bulkData: {} },
+    draft: { ...emptyDraft(), lang, bulk: true, bulkData: {} },
     replies: [
       text(
         "\u{1F33E} We supply schools, hotels, restaurants, groceries and farms in bulk.\n\n" +
@@ -804,11 +778,11 @@ export function detectPath(items: DraftItem[], catalog: Catalog): "produce" | "s
   return categories.has("seedling") ? "seedling" : "produce";
 }
 
-function confirmItemsButtons(): OutboundMessage {
-  return buttons("Is this correct?", [
-    { id: "items_yes", title: "✅ Yes, continue" },
-    { id: "items_change", title: "✏️ Change items" },
-    { id: "items_cancel", title: "❌ Cancel" },
+function confirmItemsButtons(lang: Lang): OutboundMessage {
+  return buttons(t("is_this_correct", lang), [
+    { id: "items_yes", title: t("btn_yes_continue", lang) },
+    { id: "items_change", title: t("btn_change", lang) },
+    { id: "items_cancel", title: t("btn_cancel", lang) },
   ]);
 }
 
@@ -887,18 +861,18 @@ function retryOrHandover(
     return {
       step: "HANDOVER",
       draft: { ...draft, retries: 0 },
-      replies: [text("Let me connect you with our team, who'll help you from here.")],
+      replies: [text(t("handover", draft.lang ?? "en"))],
       effects: [{ type: "HANDOVER", reason }],
     };
   }
   return { step, draft: { ...draft, retries }, replies, effects: [] };
 }
 
-function cancelled(): EngineResult {
+function cancelled(lang: Lang): EngineResult {
   return {
     step: "IDLE",
-    draft: emptyDraft(),
-    replies: [text("Order cancelled. Send a new order whenever you're ready. \u{1F331}")],
+    draft: { ...emptyDraft(), lang },
+    replies: [text(t("cancelled", lang))],
     effects: [],
   };
 }
@@ -913,16 +887,6 @@ function done(
 }
 
 // --- small utilities --------------------------------------------------------
-
-function isStop(lower: string): boolean {
-  return /^(stop|unsubscribe|opt ?out)\b/.test(lower);
-}
-function isCancel(lower: string): boolean {
-  return /^(cancel|abort)\b/.test(lower);
-}
-function wantsChange(t?: string): boolean {
-  return !!t && /^(change|edit|amend)\b/i.test(t.trim());
-}
 
 export function extractMpesaCode(t: string): string | undefined {
   // Safaricom codes are 10 chars, letters+digits, usually upper-case.
