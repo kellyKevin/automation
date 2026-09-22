@@ -35,6 +35,7 @@ async function handle(req: NextRequest) {
           `order ${g.number} for ${ksh(g.total)} is being prepared.`,
       ),
       template: standingOrderConfirmTemplate(name, schedule),
+      lang: customer?.lang === "sw" ? "sw" : "en",
     }).catch(() => {});
   }
 

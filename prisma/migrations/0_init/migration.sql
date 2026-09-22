@@ -41,6 +41,7 @@ CREATE TABLE "Customer" (
     "phone" TEXT NOT NULL,
     "name" TEXT,
     "type" TEXT NOT NULL DEFAULT 'household',
+    "lang" TEXT,
     "defaultAddress" TEXT,
     "optedOut" BOOLEAN NOT NULL DEFAULT false,
     "firstOrderAt" TIMESTAMP(3),

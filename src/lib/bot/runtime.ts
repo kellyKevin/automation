@@ -121,6 +121,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
   const replies: OutboundMessage[] = [...result.replies];
   const lang = result.draft.lang ?? "en";
 
+  // Remember the customer's language so out-of-window templates use it too.
+  if (lang !== customer.lang) {
+    await prisma.customer.update({ where: { id: customer.id }, data: { lang } }).catch(() => {});
+  }
+
   // Execute side effects.
   for (const effect of result.effects) {
     switch (effect.type) {

@@ -68,6 +68,7 @@ model Customer {
   phone          String   @unique // WhatsApp number, no '+', identifies the customer
   name           String?
   type           String   @default("household") // household | farmer | institution
+  lang           String?  // preferred bot language: "en" | "sw" (detected)
   defaultAddress String?
   optedOut       Boolean  @default(false)
   firstOrderAt   DateTime?

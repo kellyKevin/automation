@@ -57,6 +57,7 @@ export async function PATCH(
           `Reply here and we'll help you place the order.`,
       ),
       template: quoteReadyTemplate(name, amount),
+      lang: customer?.lang === "sw" ? "sw" : "en",
     }).catch(() => {});
   }
 
