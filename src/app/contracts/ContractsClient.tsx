@@ -150,6 +150,16 @@ export default function ContractsClient() {
     load();
   }
 
+  // Make a standing order due right now, then generate it.
+  async function runNow(id: string) {
+    await fetch(`/api/standing-orders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nextRunAt: new Date().toISOString() }),
+    });
+    await generateDue();
+  }
+
   async function addPrice(e: React.FormEvent, contractId: string) {
     e.preventDefault();
     setMsg(null);
@@ -268,6 +278,7 @@ export default function ContractsClient() {
                       <td className="muted">{day(s.nextRunAt)}</td>
                       <td>{s.active ? "Active" : "Paused"}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="btn btn-wa" onClick={() => runNow(s.id)} disabled={!s.active}>Run now</button>{" "}
                         <button className="btn btn-outline" onClick={() => toggleSo(s.id, !s.active)}>
                           {s.active ? "Pause" : "Resume"}
                         </button>{" "}
