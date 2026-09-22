@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStaff } from "@/lib/auth/staff";
+import { cronSecretOk } from "@/lib/jobs/cron";
 import { ordersDueForPaymentReminder, markOrderReminded } from "@/lib/orders/service";
 import { paymentReminderMessage } from "@/lib/orders/messages";
 import { paymentReminderTemplate } from "@/lib/whatsapp/templates";
@@ -9,15 +10,13 @@ import { ksh } from "@/lib/money";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /api/jobs/payment-reminders — remind customers whose orders are still
-// unpaid (Part 5). Window-aware: free-form inside the 24h window, otherwise the
-// approved payment_reminder template. Each order is reminded once. Authorised
-// by a cron secret (x-cron-secret === CRON_SECRET) or a signed-in staff member.
-export async function POST(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const provided = req.headers.get("x-cron-secret");
-  const authorised = (!!secret && provided === secret) || (await getStaff()) !== null;
-  if (!authorised) {
+// Remind customers whose orders are still unpaid (Part 5). Window-aware:
+// free-form inside the 24h window, otherwise the approved payment_reminder
+// template. Each order is reminded once. Authorised by a cron secret
+// (x-cron-secret or Vercel's Authorization: Bearer) or a signed-in staff
+// member. GET is for Vercel Cron; POST is for the dashboard.
+async function handle(req: NextRequest) {
+  if (!cronSecretOk(req) && !(await getStaff())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -44,3 +43,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ reminded, considered: due.length, olderThanMinutes: minutes });
 }
+
+export const GET = handle;
+export const POST = handle;

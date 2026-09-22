@@ -29,6 +29,21 @@ export default function AdminClient() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [jobMsg, setJobMsg] = useState<string | null>(null);
+  const [jobBusy, setJobBusy] = useState(false);
+
+  async function runJob(path: string, describe: (data: Record<string, number>) => string) {
+    setJobBusy(true);
+    setJobMsg(null);
+    try {
+      const res = await fetch(path, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setJobMsg(res.ok ? describe(data) : data.error ?? "Job failed");
+      if (res.ok) load();
+    } finally {
+      setJobBusy(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -64,9 +79,39 @@ export default function AdminClient() {
 
   if (loading) return <p>Loading orders…</p>;
   if (error) return <p>{error}</p>;
-  if (orders.length === 0) return <p className="muted">No orders yet.</p>;
+
+  const toolbar = (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "4px 0 14px" }}>
+      <button
+        className="btn btn-outline"
+        disabled={jobBusy}
+        onClick={() => runJob("/api/jobs/payment-reminders", (d) => `Sent ${d.reminded ?? 0} payment reminder(s).`)}
+      >
+        Send payment reminders
+      </button>
+      <button
+        className="btn btn-outline"
+        disabled={jobBusy}
+        onClick={() => runJob("/api/jobs/release-unpaid", (d) => `Released ${d.released ?? 0} unpaid order(s).`)}
+      >
+        Release unpaid stock
+      </button>
+      {jobMsg ? <span className="muted">{jobMsg}</span> : null}
+    </div>
+  );
+
+  if (orders.length === 0) {
+    return (
+      <>
+        {toolbar}
+        <p className="muted">No orders yet.</p>
+      </>
+    );
+  }
 
   return (
+    <>
+    {toolbar}
     <table className="orders">
       <thead>
         <tr>
@@ -129,5 +174,6 @@ export default function AdminClient() {
         ))}
       </tbody>
     </table>
+    </>
   );
 }
