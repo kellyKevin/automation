@@ -40,9 +40,10 @@ describe("parseStandingOrder", () => {
     expect(r).toMatchObject({ ok: false });
   });
 
-  it("parses a start date and rejects a bad one", () => {
+  it("parses a start date as EAT start-of-day and rejects a bad one", () => {
     const good = parseStandingOrder({ contractId: "c1", frequency: "DAILY", items: [validItem], startAt: "2026-10-01" });
-    expect(good.ok && good.data.nextRunAt.toISOString().startsWith("2026-10-01")).toBe(true);
+    // 2026-10-01 00:00 EAT === 2026-09-30 21:00 UTC.
+    expect(good.ok && good.data.nextRunAt.toISOString()).toBe("2026-09-30T21:00:00.000Z");
     expect(parseStandingOrder({ contractId: "c1", frequency: "DAILY", items: [validItem], startAt: "nope" })).toEqual({
       ok: false,
       error: "Invalid start date",
