@@ -35,9 +35,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ maxWidth: 360, margin: "48px auto" }}>
-      <h2 className="category">Staff sign in</h2>
-      <p className="muted">Sign in to manage Farm City orders and chats.</p>
+    <div className="card" style={{ width: "100%", maxWidth: 380, padding: 28, boxShadow: "var(--shadow-lg)" }}>
+      <div style={{ fontSize: "1.8rem" }}>🌱</div>
+      <h2 className="category" style={{ marginTop: 6 }}>Farm City sign in</h2>
+      <p className="muted">Manage orders, chats, dispatch and reports.</p>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
         <label>
           <div className="muted">Phone</div>
@@ -61,7 +62,7 @@ export default function LoginPage() {
           />
         </label>
         {error ? <div style={{ color: "#b02a37", fontSize: "0.85rem" }}>{error}</div> : null}
-        <button type="submit" className="btn btn-outline" disabled={busy}>
+        <button type="submit" className="btn btn-wa" disabled={busy} style={{ marginTop: 4 }}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>

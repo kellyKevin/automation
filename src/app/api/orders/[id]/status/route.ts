@@ -61,6 +61,7 @@ export async function POST(
       lastInboundAt: customer.lastInboundAt,
       freeForm,
       template,
+      lang: customer.lang === "sw" ? "sw" : "en",
       teamAlert: `⚠️ ${order.number} → ${to}: customer's 24h window is closed and no template applies. Queued for ${customer.phone}; please follow up.`,
     });
 

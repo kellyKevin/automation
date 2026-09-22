@@ -36,6 +36,7 @@ async function handle(req: NextRequest) {
       lastInboundAt: order.customer.lastInboundAt,
       freeForm: paymentReminderMessage(order.number, order.total, paybill),
       template: paymentReminderTemplate(order.number, ksh(order.total), paybill),
+      lang: order.customer.lang === "sw" ? "sw" : "en",
     });
     await markOrderReminded(order.id);
     reminded += 1;

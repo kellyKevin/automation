@@ -4,6 +4,7 @@ import { isWindowOpen } from "@/lib/whatsapp/window";
 import { chooseOutbound } from "./deliver";
 import type { OutboundMessage } from "@/lib/whatsapp/messages";
 import type { ResolvedTemplate } from "@/lib/whatsapp/templates";
+import type { Lang } from "@/lib/bot/i18n";
 
 type SendResult = { sent: boolean; id?: string };
 const failed = (): SendResult => ({ sent: false });
@@ -25,6 +26,8 @@ export async function notifyCustomer(opts: {
   lastInboundAt: Date | string | null | undefined;
   freeForm: OutboundMessage | null;
   template: ResolvedTemplate | null;
+  /** Language for the approved template (defaults to English). */
+  lang?: Lang;
   queueReason?: string;
   teamAlert?: string;
 }): Promise<NotifyOutcome> {
@@ -41,7 +44,7 @@ export async function notifyCustomer(opts: {
   }
 
   if (decision === "template" && template) {
-    const res = await sendTemplate(phone, template.name, template.params).catch(failed);
+    const res = await sendTemplate(phone, template.name, template.params, opts.lang ?? "en").catch(failed);
     await logOut(phone, `template:${template.name}(${template.params.join(", ")})`, "template", res);
     return "template";
   }

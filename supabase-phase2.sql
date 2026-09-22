@@ -11,6 +11,9 @@ ALTER TABLE "BulkQuote" ADD COLUMN IF NOT EXISTS "notes" TEXT;
 -- 2) Payment reminders (Part 5)
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "remindedAt" TIMESTAMP(3);
 
+-- 2b) Preferred bot language per customer (Swahili templates)
+ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "lang" TEXT;
+
 -- 3) Contract customers & standing orders (Phase 2)
 CREATE TABLE IF NOT EXISTS "ContractCustomer" (
     "id" TEXT NOT NULL,
