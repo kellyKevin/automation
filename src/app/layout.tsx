@@ -31,6 +31,7 @@ export default async function RootLayout({
                 <Link className="navlink" href="/products">Products</Link>
                 <Link className="navlink" href="/dispatch">Dispatch</Link>
                 <Link className="navlink" href="/quotes">Quotes</Link>
+                <Link className="navlink" href="/contracts">Contracts</Link>
                 <Link className="navlink" href="/reports">Reports</Link>
                 <Link className="navlink" href="/connect">Connect</Link>
                 <span style={{ marginLeft: "auto", opacity: 0.9 }}>{staff.name}</span>
