@@ -1,6 +1,7 @@
 import { ksh } from "@/lib/money";
 import { text, buttons } from "@/lib/whatsapp/messages";
 import type { OutboundMessage } from "@/lib/whatsapp/messages";
+import { t, type Lang } from "@/lib/bot/i18n";
 import { STATUS_LABELS, type OrderStatus } from "@/domain";
 
 export interface PaymentDetails {
@@ -9,22 +10,30 @@ export interface PaymentDetails {
   amount: number;
 }
 
+/** The three payment-choice buttons, in the customer's language. */
+export function paymentButtons(lang: Lang) {
+  return [
+    { id: "pay_paid", title: t("btn_paid", lang) },
+    { id: "pay_cod", title: t("btn_cod", lang) },
+    { id: "pay_help", title: t("btn_help", lang) },
+  ];
+}
+
 /** The two messages sent right after an order is confirmed & recorded. */
 export function orderConfirmationMessages(
   orderNumber: string,
   payment: PaymentDetails,
+  lang: Lang = "en",
 ): OutboundMessage[] {
   return [
-    text(`✅ Order ${orderNumber} received. We'll confirm stock shortly.`),
+    text(t("oc_received", lang, { number: orderNumber })),
     buttons(
-      `To complete your order, pay ${ksh(payment.amount)} via M-Pesa:\n` +
-        `Paybill: ${payment.paybill}\nAccount: ${payment.accountRef}\n\n` +
-        `Reply here with the M-Pesa confirmation message once done.`,
-      [
-        { id: "pay_paid", title: "\u{1F4B3} I've paid" },
-        { id: "pay_cod", title: "\u{1F4B5} Pay on delivery" },
-        { id: "pay_help", title: "❓ Need help" },
-      ],
+      t("oc_pay", lang, {
+        amount: ksh(payment.amount),
+        paybill: payment.paybill,
+        account: payment.accountRef,
+      }),
+      paymentButtons(lang),
     ),
   ];
 }

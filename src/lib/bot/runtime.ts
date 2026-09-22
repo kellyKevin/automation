@@ -12,7 +12,8 @@ import {
   markCashOnDelivery,
   recordMpesaCode,
 } from "@/lib/orders/service";
-import { orderConfirmationMessages, teamAlertMessage } from "@/lib/orders/messages";
+import { orderConfirmationMessages, paymentButtons, teamAlertMessage } from "@/lib/orders/messages";
+import { t } from "./i18n";
 import { availableStock } from "@/lib/orders/stock";
 import { initiateStkPush } from "@/lib/mpesa/service";
 import { ksh } from "@/lib/money";
@@ -118,6 +119,7 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
 
   const result = handleTurn(input);
   const replies: OutboundMessage[] = [...result.replies];
+  const lang = result.draft.lang ?? "en";
 
   // Execute side effects.
   for (const effect of result.effects) {
@@ -135,11 +137,11 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         // Fire an STK prompt automatically (no-op when M-Pesa isn't configured).
         await initiateStkPush(created.orderId).catch(() => {});
         replies.push(
-          ...orderConfirmationMessages(created.number, {
-            paybill,
-            accountRef: created.number,
-            amount: created.total,
-          }),
+          ...orderConfirmationMessages(
+            created.number,
+            { paybill, accountRef: created.number, amount: created.total },
+            lang,
+          ),
         );
         await alertTeam(
           teamAlertMessage(
@@ -161,24 +163,16 @@ export async function processInbound(msg: InboundMessage): Promise<void> {
         const paybill = process.env.MPESA_PAYBILL || "000000";
         const combined = orders.reduce((s, o) => s + o.total, 0);
         const refs = orders.map((o) => o.number).join(" and ");
-        replies.push(
-          textMsg(`✅ Your cart ships from two places, so I've created ${orders.length} linked orders:`),
-        );
+        replies.push(textMsg(t("linked_intro", lang, { n: orders.length })));
         for (const o of orders) {
-          const label = o.origin === "ELDORET_NURSERY" ? "Seedlings" : "Fresh produce";
+          const label =
+            o.origin === "ELDORET_NURSERY" ? t("linked_line_seedlings", lang) : t("linked_line_produce", lang);
           replies.push(textMsg(`• ${label}: ${o.number} — ${ksh(o.total)}`));
         }
         replies.push({
           kind: "buttons",
-          body:
-            `To complete both orders, pay ${ksh(combined)} via M-Pesa:\n` +
-            `Paybill: ${paybill}\nUse reference ${refs}.\n\n` +
-            `Reply here with the M-Pesa confirmation once done.`,
-          buttons: [
-            { id: "pay_paid", title: "\u{1F4B3} I've paid" },
-            { id: "pay_cod", title: "\u{1F4B5} Pay on delivery" },
-            { id: "pay_help", title: "❓ Need help" },
-          ],
+          body: t("linked_pay", lang, { amount: ksh(combined), paybill, refs }),
+          buttons: paymentButtons(lang),
         });
         await alertTeam(
           teamAlertMessage(
