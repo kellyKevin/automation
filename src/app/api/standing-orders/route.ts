@@ -6,6 +6,33 @@ import { parseStandingOrder } from "@/lib/contracts/validate";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// GET /api/standing-orders — staff: every standing order with the fields that
+// decide whether it generates, plus the server clock and a `due` flag. Handy
+// for diagnosing "Generated 0 orders".
+export async function GET() {
+  if (!(await getStaff())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const now = new Date();
+  const rows = await prisma.standingOrder.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { contract: { select: { active: true, organisation: true } }, _count: { select: { items: true } } },
+  });
+  return NextResponse.json({
+    serverTime: now.toISOString(),
+    total: rows.length,
+    standingOrders: rows.map((s) => ({
+      id: s.id,
+      label: s.label,
+      active: s.active,
+      contractActive: s.contract.active,
+      items: s._count.items,
+      nextRunAt: s.nextRunAt.toISOString(),
+      due: s.active && s.contract.active && s.nextRunAt.getTime() <= now.getTime(),
+    })),
+  });
+}
+
 // POST /api/standing-orders — staff: create a recurring order for a contract.
 export async function POST(req: NextRequest) {
   if (!(await getStaff())) {
