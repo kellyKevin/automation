@@ -1,8 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { getStaff } from "@/lib/auth/staff";
-import LogoutButton from "./LogoutButton";
+import Shell from "./Shell";
 
 export const metadata: Metadata = {
   title: "Farm City — Owner Dashboard",
@@ -18,30 +17,16 @@ export default async function RootLayout({
   const staff = await getStaff();
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>
-        <header className="site">
-          <div className="container">
-            <h1>🌱 Farm City — Dashboard</h1>
-            <p>Orders, payments &amp; delivery for the WhatsApp ordering system</p>
-            {staff ? (
-              <nav style={{ display: "flex", gap: 16, marginTop: 8, alignItems: "center" }}>
-                <Link className="navlink" href="/admin">Orders</Link>
-                <Link className="navlink" href="/inbox">Inbox</Link>
-                <Link className="navlink" href="/customers">Customers</Link>
-                <Link className="navlink" href="/products">Products</Link>
-                <Link className="navlink" href="/dispatch">Dispatch</Link>
-                <Link className="navlink" href="/quotes">Quotes</Link>
-                <Link className="navlink" href="/contracts">Contracts</Link>
-                <Link className="navlink" href="/invoices">Invoices</Link>
-                <Link className="navlink" href="/reports">Reports</Link>
-                <Link className="navlink" href="/connect">Connect</Link>
-                <span style={{ marginLeft: "auto", opacity: 0.9 }}>{staff.name}</span>
-                <LogoutButton />
-              </nav>
-            ) : null}
-          </div>
-        </header>
-        <main className="container">{children}</main>
+        <Shell staffName={staff?.name ?? null}>{children}</Shell>
       </body>
     </html>
   );
