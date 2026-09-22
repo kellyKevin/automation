@@ -9,6 +9,7 @@ export interface DispatchItem {
 }
 
 export interface DispatchOrder {
+  id: string;
   number: string;
   status: string;
   paymentStatus: string;

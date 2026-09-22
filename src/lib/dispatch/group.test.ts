@@ -3,6 +3,7 @@ import { groupDispatch, packTotals, methodLabel, type DispatchOrder } from "./gr
 
 function order(p: Partial<DispatchOrder>): DispatchOrder {
   return {
+    id: "o1",
     number: "FC-0001",
     status: "PACKED",
     paymentStatus: "PAID",

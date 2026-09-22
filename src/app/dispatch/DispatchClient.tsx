@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 interface Item {
   productName: string;
@@ -8,6 +8,7 @@ interface Item {
   unit: string;
 }
 interface Order {
+  id: string;
   number: string;
   status: string;
   paymentStatus: string;
@@ -60,7 +61,63 @@ function packTotals(orders: Order[]): Item[] {
   return [...byKey.values()].sort((a, b) => a.productName.localeCompare(b.productName));
 }
 
-function GroupBlock({ group }: { group: Group }) {
+function AssignRow({
+  order,
+  onSave,
+}: {
+  order: Order;
+  onSave: (id: string, patch: Record<string, string>) => Promise<void>;
+}) {
+  const [assignedTo, setAssignedTo] = useState(order.assignedTo ?? "");
+  const [tracking, setTracking] = useState(order.trackingNumber ?? "");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    setSaved(false);
+    await onSave(order.id, { assignedTo, trackingNumber: tracking });
+    setBusy(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  const isRider = order.method === "LOCAL_RIDER";
+  return (
+    <tr className="no-print">
+      <td colSpan={5} style={{ background: "#f7f9f5" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            placeholder={isRider ? "Rider name" : "Courier / carrier"}
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            style={{ width: 160 }}
+          />
+          {!isRider ? (
+            <input
+              placeholder="Tracking #"
+              value={tracking}
+              onChange={(e) => setTracking(e.target.value)}
+              style={{ width: 140 }}
+            />
+          ) : null}
+          <button className="btn btn-outline" onClick={save} disabled={busy}>
+            {busy ? "Saving…" : "Save assignment"}
+          </button>
+          {saved ? <span className="muted" style={{ color: "#2e7d32" }}>Saved ✓</span> : null}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function GroupBlock({
+  group,
+  onSave,
+}: {
+  group: Group;
+  onSave: (id: string, patch: Record<string, string>) => Promise<void>;
+}) {
   const totals = packTotals(group.orders);
   return (
     <section className="dispatch-group">
@@ -88,30 +145,34 @@ function GroupBlock({ group }: { group: Group }) {
         </thead>
         <tbody>
           {group.orders.map((o) => (
-            <tr key={o.number}>
-              <td>
-                <strong>{o.number}</strong>
-                {o.trackingNumber ? <><br /><span className="muted">#{o.trackingNumber}</span></> : null}
-              </td>
-              <td>
-                {o.receiverName ?? "—"}
-                <br />
-                <span className="muted">{o.receiverPhone ?? ""}</span>
-              </td>
-              <td>
-                {o.zoneName ?? ([o.town, o.county].filter(Boolean).join(", ") || "—")}
-                {o.address ? <><br /><span className="muted">{o.address}</span></> : null}
-                {o.landmark ? <><br /><span className="muted">↳ {o.landmark}</span></> : null}
-              </td>
-              <td>
-                {o.items.map((it, i) => (
-                  <div key={i}>{it.productName} × {it.quantity} {it.unit}</div>
-                ))}
-              </td>
-              <td>
-                {o.paymentStatus === "PAID" ? "Paid" : <strong>COD {ksh(o.total)}</strong>}
-              </td>
-            </tr>
+            <Fragment key={o.number}>
+              <tr>
+                <td>
+                  <strong>{o.number}</strong>
+                  {o.assignedTo ? <><br /><span className="muted">👤 {o.assignedTo}</span></> : null}
+                  {o.trackingNumber ? <><br /><span className="muted">#{o.trackingNumber}</span></> : null}
+                </td>
+                <td>
+                  {o.receiverName ?? "—"}
+                  <br />
+                  <span className="muted">{o.receiverPhone ?? ""}</span>
+                </td>
+                <td>
+                  {o.zoneName ?? ([o.town, o.county].filter(Boolean).join(", ") || "—")}
+                  {o.address ? <><br /><span className="muted">{o.address}</span></> : null}
+                  {o.landmark ? <><br /><span className="muted">↳ {o.landmark}</span></> : null}
+                </td>
+                <td>
+                  {o.items.map((it, i) => (
+                    <div key={i}>{it.productName} × {it.quantity} {it.unit}</div>
+                  ))}
+                </td>
+                <td>
+                  {o.paymentStatus === "PAID" ? "Paid" : <strong>COD {ksh(o.total)}</strong>}
+                </td>
+              </tr>
+              <AssignRow order={o} onSave={onSave} />
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -135,6 +196,18 @@ export default function DispatchClient() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const saveDelivery = useCallback(
+    async (id: string, patch: Record<string, string>) => {
+      const res = await fetch(`/api/orders/${id}/delivery`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) load();
+    },
+    [load],
+  );
 
   return (
     <>
@@ -180,14 +253,14 @@ export default function DispatchClient() {
           {data.rider.length > 0 ? (
             <>
               <h2 className="category">🛵 Rider runs (fresh produce)</h2>
-              {data.rider.map((g) => <GroupBlock key={g.key} group={g} />)}
+              {data.rider.map((g) => <GroupBlock key={g.key} group={g} onSave={saveDelivery} />)}
             </>
           ) : null}
 
           {data.courier.length > 0 ? (
             <>
               <h2 className="category">📦 Seedlings &amp; countrywide</h2>
-              {data.courier.map((g) => <GroupBlock key={g.key} group={g} />)}
+              {data.courier.map((g) => <GroupBlock key={g.key} group={g} onSave={saveDelivery} />)}
             </>
           ) : null}
         </>

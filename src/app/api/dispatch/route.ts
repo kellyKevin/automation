@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
   });
 
   const rows: DispatchOrder[] = orders.map((o) => ({
+    id: o.id,
     number: o.number,
     status: o.status,
     paymentStatus: o.paymentStatus,
