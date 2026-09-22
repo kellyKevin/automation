@@ -80,7 +80,9 @@ export default function ContractsClient() {
       body: JSON.stringify(nc),
     });
     if (!res.ok) {
-      setMsg((await res.json().catch(() => ({}))).error ?? "Could not create contract");
+      const err = (await res.json().catch(() => ({}))).error ?? "Could not create contract";
+      setMsg(err);
+      alert(`Contract not saved: ${err}`);
       return;
     }
     setNc({ phone: "", organisation: "", contactPerson: "", billingEmail: "", paymentTerms: "" });
@@ -112,13 +114,19 @@ export default function ContractsClient() {
           unitPrice: Number(it.unitPrice) || 0,
         })),
     };
+    if (payload.items.length === 0) {
+      alert("Add at least one item with a product name and quantity.");
+      return;
+    }
     const res = await fetch("/api/standing-orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      setMsg((await res.json().catch(() => ({}))).error ?? "Could not create standing order");
+      const err = (await res.json().catch(() => ({}))).error ?? "Could not create standing order";
+      setMsg(err);
+      alert(`Standing order not saved: ${err}`);
       return;
     }
     setSoFor(null);
