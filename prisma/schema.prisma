@@ -294,6 +294,8 @@ model ContractCustomer {
 
   customer       Customer        @relation(fields: [customerId], references: [id])
   standingOrders StandingOrder[]
+  prices         ContractPrice[]
+  invoices       Invoice[]
 }
 
 // A recurring order that is generated automatically on its schedule.
@@ -334,4 +336,59 @@ model StandingOrderItem {
   unitPrice       Float
 
   standingOrder StandingOrder @relation(fields: [standingOrderId], references: [id], onDelete: Cascade)
+}
+
+// --- Phase 2: price lists & invoices ---------------------------------------
+
+// A contract's agreed price for a product. Overrides the catalogue price for
+// that contract's orders (standing orders and, later, bot orders).
+model ContractPrice {
+  id          String   @id @default(cuid())
+  contractId  String
+  slug        String?
+  productName String
+  unitPrice   Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contract ContractCustomer @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, productName])
+}
+
+// A periodic invoice for a contract customer.
+model Invoice {
+  id          String    @id @default(cuid())
+  number      String    @unique // INV-0001
+  contractId  String
+  customerId  String
+  periodStart DateTime
+  periodEnd   DateTime
+  status      String    @default("DRAFT") // DRAFT | SENT | PAID | VOID
+  subtotal    Float     @default(0)
+  total       Float     @default(0)
+  notes       String?
+  sentAt      DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  contract ContractCustomer @relation(fields: [contractId], references: [id])
+  lines    InvoiceLine[]
+
+  @@index([contractId])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  orderId     String?
+  orderNumber String?
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float
+  lineTotal   Float
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }

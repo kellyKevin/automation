@@ -14,6 +14,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     include: {
       customer: { select: { name: true, phone: true } },
+      prices: { orderBy: { productName: "asc" } },
       standingOrders: {
         orderBy: { createdAt: "desc" },
         include: { items: { select: { productName: true, quantity: true, unit: true, unitPrice: true } } },

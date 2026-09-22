@@ -18,6 +18,12 @@ interface StandingOrder {
   method: string;
   items: SOItem[];
 }
+interface ContractPrice {
+  id: string;
+  slug: string | null;
+  productName: string;
+  unitPrice: number;
+}
 interface Contract {
   id: string;
   organisation: string | null;
@@ -26,6 +32,7 @@ interface Contract {
   paymentTerms: string | null;
   active: boolean;
   customer: { name: string | null; phone: string };
+  prices: ContractPrice[];
   standingOrders: StandingOrder[];
 }
 
@@ -45,6 +52,10 @@ export default function ContractsClient() {
   // New-contract form.
   const [showNew, setShowNew] = useState(false);
   const [nc, setNc] = useState({ phone: "", organisation: "", contactPerson: "", billingEmail: "", paymentTerms: "" });
+
+  // Price-list panel (per contract).
+  const [priceFor, setPriceFor] = useState<string | null>(null);
+  const [np, setNp] = useState({ productName: "", slug: "", unitPrice: "" });
 
   // Add-standing-order form (per contract).
   const [soFor, setSoFor] = useState<string | null>(null);
@@ -131,6 +142,27 @@ export default function ContractsClient() {
     load();
   }
 
+  async function addPrice(e: React.FormEvent, contractId: string) {
+    e.preventDefault();
+    setMsg(null);
+    const res = await fetch(`/api/contracts/${contractId}/prices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productName: np.productName, slug: np.slug || undefined, unitPrice: Number(np.unitPrice) }),
+    });
+    if (!res.ok) {
+      setMsg((await res.json().catch(() => ({}))).error ?? "Could not save price");
+      return;
+    }
+    setNp({ productName: "", slug: "", unitPrice: "" });
+    load();
+  }
+
+  async function deletePrice(contractId: string, priceId: string) {
+    await fetch(`/api/contracts/${contractId}/prices?priceId=${priceId}`, { method: "DELETE" });
+    load();
+  }
+
   async function generateDue() {
     setMsg(null);
     const res = await fetch("/api/jobs/standing-orders", { method: "POST" });
@@ -173,10 +205,40 @@ export default function ContractsClient() {
                 <br />
                 <span className="muted">{c.contactPerson ? `${c.contactPerson} · ` : ""}{c.customer.phone}{c.paymentTerms ? ` · ${c.paymentTerms}` : ""}</span>
               </div>
-              <button className="btn btn-outline" onClick={() => setSoFor(soFor === c.id ? null : c.id)}>
-                {soFor === c.id ? "Close" : "+ Standing order"}
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-outline" onClick={() => setPriceFor(priceFor === c.id ? null : c.id)}>
+                  {priceFor === c.id ? "Close" : `Price list (${c.prices.length})`}
+                </button>
+                <button className="btn btn-outline" onClick={() => setSoFor(soFor === c.id ? null : c.id)}>
+                  {soFor === c.id ? "Close" : "+ Standing order"}
+                </button>
+              </div>
             </div>
+
+            {priceFor === c.id ? (
+              <div style={{ marginTop: 12, background: "#f7f9f5", padding: 12, borderRadius: 8 }}>
+                <strong style={{ fontSize: "0.9rem" }}>Agreed prices</strong>
+                <p className="muted" style={{ margin: "2px 0 8px", fontSize: "0.8rem" }}>
+                  These override the catalogue price when this contract&apos;s standing orders generate.
+                </p>
+                {c.prices.length > 0 ? (
+                  <ul style={{ margin: "0 0 8px", paddingLeft: 18, fontSize: "0.85rem" }}>
+                    {c.prices.map((p) => (
+                      <li key={p.id}>
+                        {p.productName} — {ksh(p.unitPrice)}{" "}
+                        <button className="btn btn-outline" style={{ padding: "0 6px" }} onClick={() => deletePrice(c.id, p.id)}>✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="muted" style={{ fontSize: "0.85rem" }}>No agreed prices yet.</p>}
+                <form onSubmit={(e) => addPrice(e, c.id)} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <input placeholder="Product name" value={np.productName} onChange={(e) => setNp({ ...np, productName: e.target.value })} style={{ flex: "2 1 160px" }} />
+                  <input placeholder="slug (optional)" value={np.slug} onChange={(e) => setNp({ ...np, slug: e.target.value })} style={{ width: 130 }} />
+                  <input placeholder="Price" type="number" min={0} value={np.unitPrice} onChange={(e) => setNp({ ...np, unitPrice: e.target.value })} style={{ width: 90 }} />
+                  <button type="submit" className="btn btn-outline">Save price</button>
+                </form>
+              </div>
+            ) : null}
 
             {c.standingOrders.length > 0 ? (
               <table className="orders" style={{ marginTop: 10 }}>

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { createOrderFromDraft } from "@/lib/orders/service";
 import { rollForward, type Frequency } from "./schedule";
+import { priceIndex, applyContractPrices } from "./pricing";
 import type { OrderDraft } from "@/lib/bot/types";
 import type { Origin } from "@/domain";
 
@@ -27,16 +28,19 @@ export async function generateDueStandingOrders(
 ): Promise<GeneratedStandingOrder[]> {
   const due = await prisma.standingOrder.findMany({
     where: { active: true, nextRunAt: { lte: now }, contract: { active: true } },
-    include: { items: true, contract: { include: { customer: true } } },
+    include: { items: true, contract: { include: { customer: true, prices: true } } },
   });
 
   const created: GeneratedStandingOrder[] = [];
   for (const so of due) {
     const customer = so.contract.customer;
-    const draft: OrderDraft = {
-      origin: so.origin as Origin,
-      customerName: customer.name ?? undefined,
-      items: so.items.map((it) => ({
+    // Apply the contract's agreed price list, so a price change flows into the
+    // next generated order without editing every standing order.
+    const index = priceIndex(
+      so.contract.prices.map((p) => ({ slug: p.slug, productName: p.productName, unitPrice: p.unitPrice })),
+    );
+    const items = applyContractPrices(
+      so.items.map((it) => ({
         slug: it.slug ?? undefined,
         name: it.productName,
         quantity: it.quantity,
@@ -45,6 +49,12 @@ export async function generateDueStandingOrders(
         available: true,
         resolved: true,
       })),
+      index,
+    );
+    const draft: OrderDraft = {
+      origin: so.origin as Origin,
+      customerName: customer.name ?? undefined,
+      items,
       delivery: {
         method: so.method,
         zoneId: so.zoneId ?? undefined,
