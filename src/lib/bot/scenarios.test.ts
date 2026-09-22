@@ -169,6 +169,29 @@ describe("scenario: side paths", () => {
   });
 });
 
+describe("scenario: Swahili / mixed-language", () => {
+  it("greets in Swahili when the customer writes Swahili", () => {
+    const r = turn("IDLE", emptyDraft(), { text: "Habari, nataka mboga" });
+    expect(r.step).toBe("IDLE");
+    expect(r.draft.lang).toBe("sw");
+    expect(r.replies[0].body).toContain("Karibu");
+  });
+
+  it("understands a Swahili 'yes' at item confirmation and replies in Swahili", () => {
+    const start = turn("IDLE", emptyDraft(), { text: order(["• Tomatoes x 2 kg"]) });
+    const r = turn("CONFIRM_ITEMS", start.draft, { text: "ndio" });
+    expect(r.step).toBe("ASK_NAME");
+    expect(r.draft.lang).toBe("sw");
+    expect(r.replies[0].body).toContain("jina"); // "Naomba jina lako…"
+  });
+
+  it("cancels on the Swahili command 'ghairi'", () => {
+    const r = turn("ASK_NAME", { ...emptyDraft(), lang: "sw", path: "produce" }, { text: "ghairi" });
+    expect(r.step).toBe("IDLE");
+    expect(r.replies[0].body).toContain("imeghairiwa");
+  });
+});
+
 describe("scenario: 24-hour window expiry decides free-form vs template vs queue", () => {
   const now = new Date("2026-09-22T12:00:00Z");
 

@@ -1,5 +1,6 @@
 import type { ConversationStep, Origin } from "@/domain";
 import type { OutboundMessage } from "@/lib/whatsapp/messages";
+import type { Lang } from "./i18n";
 
 // A catalogue product as the engine needs to see it (a snapshot passed in by
 // the caller — the engine never touches the database).
@@ -80,6 +81,8 @@ export interface OrderDraft {
   path?: "produce" | "seedling" | "mixed";
   origin?: Origin;
   customerName?: string;
+  /** The customer's language for bot replies (detected; defaults to English). */
+  lang?: Lang;
   items: DraftItem[];
   delivery: DraftDelivery;
   bulk?: boolean;
