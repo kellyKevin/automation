@@ -28,6 +28,7 @@ export default async function RootLayout({
                 <Link className="navlink" href="/admin">Orders</Link>
                 <Link className="navlink" href="/inbox">Inbox</Link>
                 <Link className="navlink" href="/products">Products</Link>
+                <Link className="navlink" href="/dispatch">Dispatch</Link>
                 <Link className="navlink" href="/quotes">Quotes</Link>
                 <Link className="navlink" href="/reports">Reports</Link>
                 <Link className="navlink" href="/connect">Connect</Link>
