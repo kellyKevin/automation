@@ -99,24 +99,22 @@ a { color: var(--green-dark); }
   z-index: 40;
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px 14px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.2rem;
-  letter-spacing: -0.01em;
+.brand-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin: 2px 4px 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
-.brand .logo {
-  width: 34px; height: 34px;
-  display: grid; place-items: center;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.12);
-  font-size: 1.1rem;
+.brand-logo { display: block; width: 100%; height: auto; }
+.brand-sub {
+  text-align: center;
+  color: var(--sidebar-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 2px 0 12px;
 }
-.brand small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--sidebar-muted); }
 
 .nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .nav-link {

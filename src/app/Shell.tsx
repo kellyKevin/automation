@@ -46,13 +46,11 @@ export default function Shell({
   return (
     <div className="app">
       <aside className={`sidebar${open ? " open" : ""}`}>
-        <div className="brand">
-          <span className="logo">🌱</span>
-          <span>
-            Farm City
-            <small>Owner dashboard</small>
-          </span>
+        <div className="brand-card">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/logo.png" alt="Farm City" className="brand-logo" />
         </div>
+        <div className="brand-sub">Owner dashboard</div>
 
         <nav className="nav" onClick={() => setOpen(false)}>
           {NAV.map((n) => (
