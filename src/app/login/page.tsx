@@ -36,9 +36,10 @@ export default function LoginPage() {
 
   return (
     <div className="card" style={{ width: "100%", maxWidth: 380, padding: 28, boxShadow: "var(--shadow-lg)" }}>
-      <div style={{ fontSize: "1.8rem" }}>🌱</div>
-      <h2 className="category" style={{ marginTop: 6 }}>Farm City sign in</h2>
-      <p className="muted">Manage orders, chats, dispatch and reports.</p>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/images/logo.png" alt="Farm City" style={{ height: 84, width: "auto", display: "block", margin: "0 auto 6px" }} />
+      <h2 className="category" style={{ textAlign: "center", marginTop: 2 }}>Owner sign in</h2>
+      <p className="muted" style={{ textAlign: "center" }}>Manage orders, chats, dispatch and reports.</p>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
         <label>
           <div className="muted">Phone</div>
@@ -46,7 +47,7 @@ export default function LoginPage() {
             type="text"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="254711911690"
+            placeholder="254701645029"
             style={{ width: "100%" }}
             required
           />

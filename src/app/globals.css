@@ -4,11 +4,13 @@
    kept so existing pages restyle without markup changes. */
 
 :root {
-  --green: #2f8f43;
-  --green-dark: #1f6d31;
-  --green-ink: #0f4a1f;
+  /* Brand green — matched to the storefront's emerald so both apps feel as one. */
+  --green: #047857;
+  --green-dark: #065f46;
+  --green-ink: #064e3b;
   --accent: #14b8a6;
   --wa: #25d366;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
 
   --bg: #eef1ec;
   --surface: #ffffff;
@@ -19,7 +21,7 @@
   --line: #e2e8dd;
   --ring: rgba(47, 143, 67, 0.35);
 
-  --sidebar-bg: linear-gradient(180deg, #1c3b26 0%, #14301d 100%);
+  --sidebar-bg: linear-gradient(180deg, #0b3b2a 0%, #06281d 100%);
   --sidebar-ink: #e7f0e9;
   --sidebar-muted: #9fb6a6;
 
@@ -97,23 +99,22 @@ a { color: var(--green-dark); }
   z-index: 40;
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px 14px;
-  font-weight: 800;
-  font-size: 1.12rem;
-  letter-spacing: -0.01em;
+.brand-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin: 2px 4px 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
-.brand .logo {
-  width: 34px; height: 34px;
-  display: grid; place-items: center;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.12);
-  font-size: 1.1rem;
+.brand-logo { display: block; width: 100%; height: auto; }
+.brand-sub {
+  text-align: center;
+  color: var(--sidebar-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 2px 0 12px;
 }
-.brand small { display: block; font-weight: 500; font-size: 0.72rem; color: var(--sidebar-muted); }
 
 .nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .nav-link {
@@ -167,7 +168,7 @@ a { color: var(--green-dark); }
   backdrop-filter: saturate(180%) blur(8px);
   border-bottom: 1px solid var(--line);
 }
-.topbar h1 { margin: 0; font-size: 1rem; font-weight: 700; }
+.topbar h1 { margin: 0; font-family: var(--font-display); font-size: 1.12rem; font-weight: 600; letter-spacing: -0.01em; }
 .topbar .spacer { flex: 1; }
 .hamburger {
   display: none;
@@ -201,8 +202,9 @@ a { color: var(--green-dark); }
 
 h2.category, .category {
   margin: 6px 0 4px;
-  font-size: 1.35rem;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 .muted { color: var(--muted); }
